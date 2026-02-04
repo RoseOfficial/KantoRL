@@ -335,6 +335,29 @@ def main() -> int:
         help="Path to save state file (.state) for starting point",
     )
 
+    # Streaming visualization options (same as train command)
+    benchmark_single_parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Enable streaming to shared map visualization",
+    )
+    benchmark_single_parser.add_argument(
+        "--stream-user",
+        default="kantorl-bench",
+        help="Username for stream display (default: kantorl-bench)",
+    )
+    benchmark_single_parser.add_argument(
+        "--stream-color",
+        default="#ff0000",
+        help="Hex color for stream display (default: #ff0000)",
+    )
+    benchmark_single_parser.add_argument(
+        "--stream-sprite",
+        type=int,
+        default=0,
+        help="Sprite ID (0-50) for stream display (default: 0)",
+    )
+
     # -------------------------------------------------------------------------
     # Benchmark Compare Command
     # -------------------------------------------------------------------------
@@ -543,6 +566,10 @@ def main() -> int:
                 n_envs=args.envs,
                 output_dir=args.output,
                 save_state_path=args.save_state,
+                enable_streaming=args.stream,
+                stream_username=args.stream_user,
+                stream_color=args.stream_color,
+                stream_sprite_id=args.stream_sprite,
                 verbose=1,
             )
 

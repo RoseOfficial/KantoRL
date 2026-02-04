@@ -239,6 +239,12 @@ class BenchmarkConfig:
     early_stop: bool = True
     save_state_path: str | None = None
 
+    # Streaming configuration for real-time visualization
+    enable_streaming: bool = False
+    stream_username: str = "kantorl-bench"
+    stream_color: str = "#ff0000"
+    stream_sprite_id: int = 0
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> BenchmarkConfig:
         """Create from dictionary, handling tier conversion."""
@@ -299,6 +305,10 @@ class BenchmarkRunner:
         output_dir: str | Path = "runs/benchmarks",
         early_stop: bool = True,
         save_state_path: str | None = None,
+        enable_streaming: bool = False,
+        stream_username: str = "kantorl-bench",
+        stream_color: str = "#ff0000",
+        stream_sprite_id: int = 0,
         verbose: int = 1,
     ):
         """
@@ -313,6 +323,10 @@ class BenchmarkRunner:
             early_stop: Stop training when milestone is reached.
             save_state_path: Path to save state file (.state). If None, the
                 environment auto-detects common state files next to the ROM.
+            enable_streaming: Enable WebSocket streaming for visualization.
+            stream_username: Display name on the shared map.
+            stream_color: Hex color code for map marker.
+            stream_sprite_id: Character sprite ID (0-50) for map display.
             verbose: Verbosity level (0=silent, 1=progress, 2=detailed).
         """
         self.rom_path = rom_path
@@ -322,6 +336,10 @@ class BenchmarkRunner:
             n_envs=n_envs,
             early_stop=early_stop,
             save_state_path=save_state_path,
+            enable_streaming=enable_streaming,
+            stream_username=stream_username,
+            stream_color=stream_color,
+            stream_sprite_id=stream_sprite_id,
         )
         self.output_dir = Path(output_dir)
         self.verbose = verbose
@@ -367,12 +385,16 @@ class BenchmarkRunner:
             print(f"Max steps: {self.benchmark_config.max_steps:,}")
             print(f"{'='*60}\n")
 
-        # Create KantoConfig with overrides
+        # Create KantoConfig with overrides (includes streaming settings)
         kanto_config = KantoConfig(
             rom_path=self.rom_path,
             save_state_path=self.benchmark_config.save_state_path,
             session_path=self.output_dir / config_name / f"seed_{seed}",
             n_envs=self.benchmark_config.n_envs,
+            enable_streaming=self.benchmark_config.enable_streaming,
+            stream_username=self.benchmark_config.stream_username,
+            stream_color=self.benchmark_config.stream_color,
+            stream_sprite_id=self.benchmark_config.stream_sprite_id,
             **config_overrides,
         )
 
@@ -384,6 +406,7 @@ class BenchmarkRunner:
                 rank=i,
                 seed=seed,
                 reward_fn=reward_fn,
+                enable_streaming=self.benchmark_config.enable_streaming,
             )
             for i in range(self.benchmark_config.n_envs)
         ]
