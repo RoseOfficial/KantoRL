@@ -183,8 +183,8 @@ def main() -> int:
     )
     train_parser.add_argument(
         "--stream-color",
-        default="#0033ff",
-        help="Hex color for stream display (default: #0033ff)",
+        default="#ff0000",
+        help="Hex color for stream display (default: #ff0000)",
     )
     train_parser.add_argument(
         "--stream-sprite",

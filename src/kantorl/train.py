@@ -39,8 +39,9 @@ Parallel Environments:
     - Default 16 environments provides 16x throughput
     - More environments = faster training but more RAM
 
-    The first environment (rank=0) can optionally stream to a visualization
-    server for monitoring training progress in real-time.
+    All environments can optionally stream to a visualization server for
+    monitoring training progress in real-time, each with a unique username
+    and auto-generated color.
 
 Auto-Resume:
     Training automatically resumes from the latest checkpoint unless
@@ -169,7 +170,7 @@ def train(
     seed: int = 42,
     enable_streaming: bool = False,
     stream_username: str = "kantorl-agent",
-    stream_color: str = "#0033ff",
+    stream_color: str = "#ff0000",
     stream_sprite_id: int = 0,
 ) -> None:
     """
@@ -209,7 +210,7 @@ def train(
         seed: Random seed for reproducibility. Default 42.
              Affects environment randomization and model initialization.
         enable_streaming: Enable real-time streaming to visualization server.
-                         Default False. Only the first environment streams.
+                         Default False. All parallel environments stream.
         stream_username: Display name for the streaming visualization.
         stream_color: Hex color code for the stream display (e.g., "#0033ff").
         stream_sprite_id: Sprite ID for the stream visualization (0-50).
@@ -270,7 +271,7 @@ def train(
 
     # Create a list of environment factory functions
     # Each function, when called, creates one environment instance
-    # Only the first environment (rank=0) streams if streaming is enabled
+    # All environments stream if streaming is enabled (each with unique color/name)
     env_fns = [
         make_env(
             rom_path,
@@ -278,7 +279,7 @@ def train(
             rank=i,  # Unique ID for this environment instance
             seed=seed,  # Base seed (each env adds rank for unique seeds)
             reward_fn=reward_fn,
-            enable_streaming=(enable_streaming and i == 0),  # Only rank 0 streams
+            enable_streaming=enable_streaming,  # All environments stream
         )
         for i in range(n_envs)
     ]
@@ -498,8 +499,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--stream-color",
-        default="#0033ff",
-        help="Hex color for stream display (default: #0033ff)",
+        default="#ff0000",
+        help="Hex color for stream display (default: #ff0000)",
     )
     parser.add_argument(
         "--stream-sprite",

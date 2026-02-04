@@ -13,8 +13,8 @@ Architecture Role:
 
     train.py → SubprocVecEnv → StreamWrapper → KantoRedEnv → PyBoy
 
-    Only one environment (rank=0) typically has streaming enabled to avoid
-    overwhelming the server with redundant data.
+    All parallel environments can stream simultaneously, each with a unique
+    username suffix and auto-generated color for visual distinction.
 
 How It Works:
     1. On initialization, establishes a WebSocket connection to the server
@@ -35,7 +35,7 @@ Protocol:
     {
         "metadata": {
             "user": "username",
-            "color": "#0033ff",
+            "color": "#ff0000",
             "sprite_id": 0
         },
         "coords": [[x, y, map_id], [x, y, map_id], ...]
@@ -67,10 +67,11 @@ Notes:
     - websockets package must be installed separately: pip install websockets
     - If websockets is not installed, streaming is silently disabled
     - Connection failures are handled gracefully (training continues)
-    - Only the first environment in a vectorized setup should stream
+    - All environments in a vectorized setup can stream simultaneously
 """
 
 import asyncio
+import colorsys
 import json
 from typing import Any, Dict, Optional
 
@@ -78,6 +79,48 @@ import gymnasium as gym
 import numpy as np  # noqa: F401 - May be used in future extensions
 
 from kantorl import memory
+
+
+# =============================================================================
+# COLOR GENERATION
+# =============================================================================
+
+
+# Default color for all streaming agents
+DEFAULT_STREAM_COLOR = "#ff0000"
+
+
+def _generate_agent_color(rank: int, n_envs: int) -> str:
+    """
+    Generate a unique color for each agent using HSL hue rotation.
+
+    Distributes hues evenly around the color wheel so that N agents get
+    maximally distinct colors. Uses high saturation and mid lightness for
+    vibrant, easily distinguishable markers on the shared map.
+
+    Args:
+        rank: This agent's index (0 to n_envs-1).
+        n_envs: Total number of parallel environments.
+
+    Returns:
+        Hex color string in "#RRGGBB" format.
+
+    Example:
+        >>> _generate_agent_color(0, 4)  # Red-ish
+        '#e51a1a'
+        >>> _generate_agent_color(1, 4)  # Green-ish
+        '#1ae51a'
+        >>> _generate_agent_color(2, 4)  # Blue-ish
+        '#1a1ae5'
+    """
+    # Evenly space hues around the color wheel [0.0, 1.0)
+    hue = rank / max(n_envs, 1)
+
+    # colorsys.hls_to_rgb expects (hue, lightness, saturation)
+    # lightness=0.5 gives pure colors, saturation=0.9 keeps them vivid
+    r, g, b = colorsys.hls_to_rgb(hue, 0.5, 0.9)
+
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
 
 # =============================================================================
@@ -136,11 +179,13 @@ class StreamWrapper(gym.Wrapper):
         self,
         env: gym.Env,
         username: str = "kantorl-agent",
-        color: str = "#0033ff",
+        color: str = "#ff0000",
         sprite_id: int = 0,
         stream_interval: int = 300,
         extra_info: str = "",
         enabled: bool = True,
+        rank: int | None = None,
+        n_envs: int | None = None,
     ):
         """
         Initialize the StreamWrapper.
@@ -148,6 +193,10 @@ class StreamWrapper(gym.Wrapper):
         Sets up the WebSocket connection and configures streaming metadata.
         If websockets is not installed or connection fails, streaming is
         disabled but the wrapper still functions as a pass-through.
+
+        When rank and n_envs are provided and the color is the default,
+        an auto-generated color is assigned using HSL hue rotation so that
+        each parallel agent gets a visually distinct marker on the shared map.
 
         Args:
             env: The Gymnasium environment to wrap. Must have a `pyboy`
@@ -157,7 +206,7 @@ class StreamWrapper(gym.Wrapper):
                      Default: "kantorl-agent"
             color: Hex color code for the agent's trail/marker on the map.
                   Format: "#RRGGBB" (e.g., "#0033ff" for blue).
-                  Default: "#0033ff" (blue)
+                  Default: "#ff0000" (red).
             sprite_id: Character sprite ID for visualization (0-50).
                       Different sprites show different Pokemon trainer appearances.
                       Default: 0
@@ -171,6 +220,11 @@ class StreamWrapper(gym.Wrapper):
                     the wrapper without attempting to connect. Useful for
                     conditional streaming in vectorized environments.
                     Default: True
+            rank: This environment's index (0 to n_envs-1). When provided
+                 along with n_envs, enables auto-color generation for
+                 distinct per-agent colors.
+            n_envs: Total number of parallel environments. Used with rank
+                   to compute evenly-spaced colors.
 
         Notes:
             - WebSocket connection is attempted synchronously during init
@@ -373,7 +427,7 @@ class StreamWrapper(gym.Wrapper):
             {
                 "metadata": {
                     "user": "username",
-                    "color": "#0033ff",
+                    "color": "#ff0000",
                     "sprite_id": 0
                 },
                 "coords": [[x, y, map_id], ...]

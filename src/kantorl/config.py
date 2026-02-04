@@ -242,8 +242,8 @@ class KantoConfig:
     stream_username: str = "kantorl-agent"
 
     # Hex color code for this agent's marker on the map
-    # Format: "#RRGGBB" (e.g., "#0033ff" for blue)
-    stream_color: str = "#0033ff"
+    # Format: "#RRGGBB" (e.g., "#ff0000" for red)
+    stream_color: str = "#ff0000"
 
     # Character sprite ID for map visualization (0-50)
     # Different IDs show different Pokemon trainer sprites
