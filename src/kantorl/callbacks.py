@@ -256,6 +256,14 @@ class TensorboardCallback(BaseCallback):
         self.events_triggered: list[int] = []  # Event flag counts from info dicts
         self.unique_coords: list[int] = []  # Exploration tile counts from info dicts
 
+        # Curriculum learning metric buffers
+        # Only populated when curriculum mode is active
+        self.curriculum_pool_sizes: list[int] = []
+        self.curriculum_best_progress: list[int] = []
+        self.curriculum_checkpoint_resets: list[int] = []
+        self.curriculum_total_resets: list[int] = []
+        self.curriculum_dynamic_max_steps: list[int] = []
+
     def _on_step(self) -> bool:
         """
         Called after each training step. Collects metrics and logs periodically.
@@ -279,6 +287,18 @@ class TensorboardCallback(BaseCallback):
             if "unique_coords" in info:
                 self.unique_coords.append(info["unique_coords"])
 
+            # Collect curriculum metrics (only present when curriculum is active)
+            if "curriculum_pool_size" in info:
+                self.curriculum_pool_sizes.append(info["curriculum_pool_size"])
+            if "curriculum_best_progress" in info:
+                self.curriculum_best_progress.append(info["curriculum_best_progress"])
+            if "curriculum_checkpoint_resets" in info:
+                self.curriculum_checkpoint_resets.append(info["curriculum_checkpoint_resets"])
+            if "curriculum_total_resets" in info:
+                self.curriculum_total_resets.append(info["curriculum_total_resets"])
+            if "curriculum_dynamic_max_steps" in info:
+                self.curriculum_dynamic_max_steps.append(info["curriculum_dynamic_max_steps"])
+
         # Log aggregated metrics at regular intervals
         if self.num_timesteps % self.log_freq == 0 and self.badges_collected:
             # Log badge statistics
@@ -290,11 +310,41 @@ class TensorboardCallback(BaseCallback):
             self.logger.record("game/events_mean", np.mean(self.events_triggered))
             self.logger.record("game/explore_tiles_mean", np.mean(self.unique_coords))
 
+            # Log curriculum metrics (only if curriculum data was collected)
+            if self.curriculum_pool_sizes:
+                self.logger.record(
+                    "curriculum/pool_size",
+                    max(self.curriculum_pool_sizes),
+                )
+            if self.curriculum_best_progress:
+                self.logger.record(
+                    "curriculum/best_progress",
+                    max(self.curriculum_best_progress),
+                )
+            if self.curriculum_checkpoint_resets and self.curriculum_total_resets:
+                # Calculate percentage of resets that used checkpoints
+                total_cp = max(self.curriculum_checkpoint_resets)
+                total_all = max(max(self.curriculum_total_resets), 1)
+                self.logger.record(
+                    "curriculum/checkpoint_reset_pct",
+                    total_cp / total_all,
+                )
+            if self.curriculum_dynamic_max_steps:
+                self.logger.record(
+                    "curriculum/dynamic_max_steps",
+                    np.mean(self.curriculum_dynamic_max_steps),
+                )
+
             # Clear buffers to track recent performance only
             # This prevents old data from affecting current statistics
             self.badges_collected.clear()
             self.events_triggered.clear()
             self.unique_coords.clear()
+            self.curriculum_pool_sizes.clear()
+            self.curriculum_best_progress.clear()
+            self.curriculum_checkpoint_resets.clear()
+            self.curriculum_total_resets.clear()
+            self.curriculum_dynamic_max_steps.clear()
 
         return True
 

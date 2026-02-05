@@ -850,3 +850,247 @@ def is_text_displayed(pyboy: "PyBoy") -> bool:
         - Text boxes pause normal gameplay
     """
     return read_byte(pyboy, ADDR_TEXT_BOX) != 0
+
+
+# =============================================================================
+# MEMORY ADDRESS CONSTANTS - BAG ITEMS
+# =============================================================================
+# The player's bag stores items as sequential (item_id, quantity) pairs.
+# The bag can hold up to 20 different item types.
+
+# Number of distinct items in the bag
+# Address: 0xD31D
+# Size: 1 byte
+# Range: 0-20
+# Source: pokered disassembly (wNumBagItems)
+ADDR_BAG_COUNT = 0xD31D
+
+# Start of bag item data (pairs of item_id, quantity)
+# Address: 0xD31E
+# Size: 2 bytes per item (item_id + quantity), up to 20 items
+# Format: [item_id_0, qty_0, item_id_1, qty_1, ..., 0xFF terminator]
+# Source: pokered disassembly (wBagItems)
+ADDR_BAG_ITEMS = 0xD31E
+
+
+# =============================================================================
+# MEMORY ADDRESS CONSTANTS - PARTY POKEMON MOVES
+# =============================================================================
+# Each party Pokemon stores 4 move IDs and 4 PP values.
+# The party data structure uses a 44-byte stride per Pokemon.
+
+# Party Pokemon Move IDs (first Pokemon)
+# Address: 0xD173
+# Size: 4 bytes (1 byte per move slot)
+# Range: 0-165 for valid moves (0 = empty slot)
+# Source: pokered disassembly (wPartyMon1Moves)
+# Note: Subsequent Pokemon at +44 byte intervals
+ADDR_PARTY_MOVES = 0xD173
+
+# Party Pokemon Move PP (first Pokemon)
+# Address: 0xD188
+# Size: 4 bytes (1 byte per move slot)
+# Source: pokered disassembly (wPartyMon1PP)
+# Note: Subsequent Pokemon at +44 byte intervals
+ADDR_PARTY_PP = 0xD188
+
+# Stride between Pokemon in the party data structure
+# Each Pokemon occupies 44 bytes of data
+# Source: pokered disassembly (PARTYMON_STRUCT_LENGTH)
+PARTY_MON_STRIDE = 44
+
+
+# =============================================================================
+# MEMORY ADDRESS CONSTANTS - FIELD MOVE DETECTION
+# =============================================================================
+# Addresses used to detect when field moves (Cut, Surf, Strength) can be used.
+
+# Tile ID that the player is currently facing
+# Address: 0xCFC6
+# Size: 1 byte
+# Source: pokered disassembly (wTileInFrontOfPlayer)
+# Note: Contains the tile type the player would step onto / interact with
+ADDR_TILE_IN_FRONT = 0xCFC6
+
+# Walk/Bike/Surf state
+# Address: 0xD700
+# Size: 1 byte
+# Values: 0 = walking, 1 = biking, 2 = surfing
+# Source: pokered disassembly (wWalkBikeSurfState)
+ADDR_WALK_BIKE_SURF = 0xD700
+
+
+# =============================================================================
+# HM ITEM AND MOVE CONSTANTS
+# =============================================================================
+# Item IDs for Hidden Machines found in the bag, and their corresponding
+# move IDs when taught to a Pokemon.
+
+# HM Item IDs (found in bag)
+# Source: pokered disassembly (constants/item_constants.asm)
+HM_CUT_ITEM = 0xC4      # HM01 Cut (item ID 196)
+HM_SURF_ITEM = 0xC6     # HM03 Surf (item ID 198)
+HM_STRENGTH_ITEM = 0xC7  # HM04 Strength (item ID 199)
+
+# Corresponding Move IDs (written to Pokemon move slots)
+# Source: pokered disassembly (constants/move_constants.asm)
+MOVE_CUT = 0x0F          # Move ID 15 - Cut
+MOVE_SURF = 0x39         # Move ID 57 - Surf
+MOVE_STRENGTH = 0x46     # Move ID 70 - Strength
+
+# PP values for HM moves (base PP, no PP Ups)
+# Source: pokered disassembly (data/moves/moves.asm)
+PP_CUT = 30
+PP_SURF = 15
+PP_STRENGTH = 15
+
+# Cuttable tree tile IDs (overworld tiles that can be cut)
+# Source: pokered disassembly (engine/overworld/cut.asm)
+# These are the tile IDs that represent small trees blocking the path
+CUTTABLE_TREE_TILES = frozenset({0x3D, 0x50})
+
+# Water tile IDs (tiles that can be surfed on)
+# Source: pokered disassembly (engine/overworld/player_movement.asm)
+WATER_TILES = frozenset({0x14, 0x32, 0x48})
+
+
+# =============================================================================
+# GAME STATE READING FUNCTIONS - BAG AND ITEMS
+# =============================================================================
+# Functions for reading the player's inventory.
+
+
+def get_bag_items(pyboy: "PyBoy") -> list[tuple[int, int]]:
+    """
+    Get all items in the player's bag.
+
+    Items are stored as sequential (item_id, quantity) pairs in memory,
+    terminated by 0xFF. The count at ADDR_BAG_COUNT tells us how many
+    pairs to read.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+
+    Returns:
+        List of (item_id, quantity) tuples for each item in the bag.
+        Empty list if bag is empty.
+
+    Example:
+        >>> items = get_bag_items(pyboy)
+        >>> for item_id, qty in items:
+        ...     print(f"Item 0x{item_id:02X}: x{qty}")
+        Item 0xC4: x1  # HM01 Cut
+
+    Notes:
+        - Item count is clamped to 20 (max bag capacity)
+        - Each item occupies 2 bytes: item_id at offset 0, quantity at offset 1
+        - HM items always have quantity 1 and cannot be discarded
+    """
+    count = min(read_byte(pyboy, ADDR_BAG_COUNT), 20)
+    items = []
+    for i in range(count):
+        item_id = read_byte(pyboy, ADDR_BAG_ITEMS + i * 2)
+        quantity = read_byte(pyboy, ADDR_BAG_ITEMS + i * 2 + 1)
+        items.append((item_id, quantity))
+    return items
+
+
+def has_item(pyboy: "PyBoy", item_id: int) -> bool:
+    """
+    Check if the player has a specific item in their bag.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+        item_id: The item ID to search for (e.g., HM_CUT_ITEM = 0xC4).
+
+    Returns:
+        True if the item is in the bag, False otherwise.
+
+    Example:
+        >>> if has_item(pyboy, HM_CUT_ITEM):
+        ...     print("Player has HM01 Cut!")
+    """
+    return any(iid == item_id for iid, _ in get_bag_items(pyboy))
+
+
+# =============================================================================
+# GAME STATE READING FUNCTIONS - PARTY MOVES
+# =============================================================================
+# Functions for reading and writing Pokemon move data.
+
+
+def get_party_moves(pyboy: "PyBoy", slot: int) -> list[int]:
+    """
+    Get the 4 move IDs for a party Pokemon.
+
+    Each Pokemon has 4 move slots. Empty slots contain 0.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+        slot: Party slot index (0-5, where 0 is the first Pokemon).
+
+    Returns:
+        List of 4 move IDs (0 = empty slot).
+
+    Example:
+        >>> moves = get_party_moves(pyboy, 0)
+        >>> print(f"First Pokemon moves: {moves}")
+        First Pokemon moves: [33, 45, 0, 0]  # Tackle, Growl, empty, empty
+
+    Notes:
+        - Slot must be 0-5 (not bounds-checked for performance)
+        - Move ID 0 means the slot is empty
+        - Moves are stored at ADDR_PARTY_MOVES + slot * PARTY_MON_STRIDE
+    """
+    base = ADDR_PARTY_MOVES + slot * PARTY_MON_STRIDE
+    return [read_byte(pyboy, base + i) for i in range(4)]
+
+
+def get_tile_in_front(pyboy: "PyBoy") -> int:
+    """
+    Get the tile ID that the player is currently facing.
+
+    This is used to detect whether the player is facing a cuttable tree,
+    water tile, or boulder that requires an HM field move.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+
+    Returns:
+        Tile ID (0-255) of the tile in front of the player.
+
+    Example:
+        >>> tile = get_tile_in_front(pyboy)
+        >>> if tile in CUTTABLE_TREE_TILES:
+        ...     print("Facing a cuttable tree!")
+
+    Notes:
+        - Only meaningful in the overworld (not in menus or battle)
+        - The tile value depends on the current tileset
+        - Used by HM automation to trigger Cut/Surf/Strength
+    """
+    return read_byte(pyboy, ADDR_TILE_IN_FRONT)
+
+
+def party_has_move(pyboy: "PyBoy", move_id: int) -> bool:
+    """
+    Check if any Pokemon in the party knows a specific move.
+
+    Scans all party Pokemon's move slots for the given move ID.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+        move_id: The move ID to search for (e.g., MOVE_CUT = 0x0F).
+
+    Returns:
+        True if any party Pokemon knows the move, False otherwise.
+
+    Example:
+        >>> if party_has_move(pyboy, MOVE_CUT):
+        ...     print("A party Pokemon knows Cut!")
+    """
+    count = get_party_count(pyboy)
+    for slot in range(count):
+        if move_id in get_party_moves(pyboy, slot):
+            return True
+    return False

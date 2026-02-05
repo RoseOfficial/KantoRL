@@ -156,6 +156,58 @@ def create_policy_kwargs() -> dict:
 
 
 # =============================================================================
+# LSTM POLICY CONFIGURATION (CURRICULUM MODE)
+# =============================================================================
+
+
+def create_lstm_policy_kwargs() -> dict:
+    """
+    Create the LSTM policy network architecture for RecurrentPPO.
+
+    When curriculum learning is enabled, we use RecurrentPPO with LSTM
+    layers instead of standard PPO. The LSTM provides temporal memory
+    across timesteps, which is critical for:
+    - Navigating long sequences (caves, buildings)
+    - Remembering what the agent was doing before a battle
+    - Maintaining context across the longer episodes in curriculum mode
+
+    Network Architecture:
+        - Policy LSTM: 256 hidden units, 1 layer
+        - Critic LSTM: 256 hidden units, 1 layer (separate from policy)
+        - Policy MLP: LSTM output → 256 → Actions
+        - Critic MLP: LSTM output → 256 → Value
+
+    Why Separate LSTMs?
+        shared_lstm=False gives policy and critic independent memories.
+        This prevents value function gradient updates from corrupting the
+        policy's temporal representations, which is especially important
+        in Pokemon Red where the value landscape is very different from
+        the policy landscape.
+
+    Returns:
+        Dictionary with LSTM and network architecture configuration.
+
+    Example:
+        >>> kwargs = create_lstm_policy_kwargs()
+        >>> model = RecurrentPPO("MultiInputLstmPolicy", env, policy_kwargs=kwargs)
+    """
+    return {
+        # LSTM configuration
+        "lstm_hidden_size": 256,     # Hidden state size for temporal memory
+        "n_lstm_layers": 1,          # Single LSTM layer (sufficient, faster)
+        "shared_lstm": False,        # Separate LSTMs for policy and critic
+        "enable_critic_lstm": True,  # Critic gets its own LSTM
+
+        # MLP layers after LSTM output
+        "net_arch": {
+            "pi": [256],  # Policy: LSTM → 256 → Actions
+            "vf": [256],  # Value: LSTM → 256 → Value
+        },
+        "activation_fn": torch.nn.ReLU,
+    }
+
+
+# =============================================================================
 # MAIN TRAINING FUNCTION
 # =============================================================================
 
@@ -172,6 +224,7 @@ def train(
     stream_username: str = "KantoRL",
     stream_color: str = "#ff0000",
     stream_sprite_id: int = 0,
+    use_curriculum: bool = False,
 ) -> None:
     """
     Run PPO training on Pokemon Red.
@@ -214,6 +267,9 @@ def train(
         stream_username: Display name for the streaming visualization.
         stream_color: Hex color code for the stream display (e.g., "#0033ff").
         stream_sprite_id: Sprite ID for the stream visualization (0-50).
+        use_curriculum: Enable curriculum learning with auto-checkpointing,
+                       HM automation, and LSTM policy (RecurrentPPO).
+                       Requires: pip install -e ".[curriculum]"
 
     Side Effects:
         - Creates session_path directory if it doesn't exist
@@ -259,6 +315,7 @@ def train(
         stream_username=stream_username,
         stream_color=stream_color,
         stream_sprite_id=stream_sprite_id,
+        enable_curriculum=use_curriculum,
     )
 
     print(f"Creating {n_envs} parallel environments...")
@@ -280,6 +337,7 @@ def train(
             seed=seed,  # Base seed (each env adds rank for unique seeds)
             reward_fn=reward_fn,
             enable_streaming=enable_streaming,  # All environments stream
+            enable_curriculum=use_curriculum,   # Curriculum wrapping
         )
         for i in range(n_envs)
     ]
@@ -301,13 +359,25 @@ def train(
     # -------------------------------------------------------------------------
     # Model Creation or Loading
     # -------------------------------------------------------------------------
+
+    # Detect whether to use RecurrentPPO (LSTM) or standard PPO
+    # Curriculum mode uses RecurrentPPO for temporal memory across steps
+    # A flag file tracks which model type was used so we load correctly
+    curriculum_flag = session_path / "curriculum_enabled.flag"
+
     if checkpoint_path and resume:
         # Resume from existing checkpoint
         print(f"Resuming from checkpoint: {checkpoint_path} (step {start_steps:,})")
 
-        # Load the model with all its state (weights, optimizer, etc.)
-        # env= parameter updates the model's environment reference
-        model = PPO.load(checkpoint_path, env=env)
+        # Detect model type from flag file
+        # If the flag file exists, the checkpoint was saved by RecurrentPPO
+        is_recurrent = curriculum_flag.exists()
+
+        if is_recurrent:
+            from sb3_contrib import RecurrentPPO
+            model = RecurrentPPO.load(checkpoint_path, env=env)
+        else:
+            model = PPO.load(checkpoint_path, env=env)
 
         # Calculate remaining steps (may be 0 if already completed)
         remaining_steps = max(0, total_timesteps - start_steps)
@@ -315,35 +385,70 @@ def train(
         # Start fresh training with new model
         print("Starting fresh training...")
 
-        # Create new PPO model with configured hyperparameters
-        model = PPO(
-            # Policy type: MultiInputPolicy handles Dict observation spaces
-            # It uses NatureCNN for image observations (screens) and
-            # MLP for vector observations (health, badges, etc.)
-            "MultiInputPolicy",
-            env,
-            # Rollout parameters
-            n_steps=config.n_steps,  # Steps per env before update (128)
-            batch_size=config.batch_size,  # Mini-batch size for SGD (512)
-            n_epochs=config.n_epochs,  # Optimization passes per rollout (3)
-            # Discount and advantage estimation
-            gamma=config.gamma,  # Discount factor (0.998 = long horizon)
-            gae_lambda=config.gae_lambda,  # GAE lambda (0.95)
-            # PPO clipping
-            clip_range=config.clip_range,  # Policy clip range (0.2)
-            # Loss coefficients
-            ent_coef=config.ent_coef,  # Entropy bonus (0.01 = mild exploration)
-            vf_coef=config.vf_coef,  # Value function coefficient (0.5)
-            # Optimizer
-            learning_rate=config.learning_rate,  # Learning rate (2.5e-4)
-            # Network architecture (defined above)
-            policy_kwargs=create_policy_kwargs(),
-            # Logging
-            tensorboard_log=str(session_path / "tensorboard"),
-            verbose=1,  # Print training info
-            # Reproducibility
-            seed=seed,
-        )
+        if use_curriculum:
+            # Use RecurrentPPO with LSTM for curriculum learning
+            # LSTM provides temporal memory across longer episodes
+            from sb3_contrib import RecurrentPPO
+
+            model = RecurrentPPO(
+                # MultiInputLstmPolicy: Dict obs + LSTM layers
+                "MultiInputLstmPolicy",
+                env,
+                # Rollout parameters
+                n_steps=config.n_steps,
+                batch_size=config.batch_size,
+                n_epochs=config.n_epochs,
+                # Discount and advantage estimation
+                gamma=config.gamma,
+                gae_lambda=config.gae_lambda,
+                # PPO clipping
+                clip_range=config.clip_range,
+                # Loss coefficients
+                ent_coef=config.ent_coef,
+                vf_coef=config.vf_coef,
+                # Optimizer
+                learning_rate=config.learning_rate,
+                # LSTM network architecture
+                policy_kwargs=create_lstm_policy_kwargs(),
+                # Logging
+                tensorboard_log=str(session_path / "tensorboard"),
+                verbose=1,
+                seed=seed,
+            )
+
+            # Write flag file so we know to use RecurrentPPO.load() on resume
+            curriculum_flag.write_text("curriculum")
+        else:
+            # Standard PPO without LSTM
+            model = PPO(
+                # Policy type: MultiInputPolicy handles Dict observation spaces
+                # It uses NatureCNN for image observations (screens) and
+                # MLP for vector observations (health, badges, etc.)
+                "MultiInputPolicy",
+                env,
+                # Rollout parameters
+                n_steps=config.n_steps,  # Steps per env before update (128)
+                batch_size=config.batch_size,  # Mini-batch size for SGD (512)
+                n_epochs=config.n_epochs,  # Optimization passes per rollout (3)
+                # Discount and advantage estimation
+                gamma=config.gamma,  # Discount factor (0.998 = long horizon)
+                gae_lambda=config.gae_lambda,  # GAE lambda (0.95)
+                # PPO clipping
+                clip_range=config.clip_range,  # Policy clip range (0.2)
+                # Loss coefficients
+                ent_coef=config.ent_coef,  # Entropy bonus (0.01 = mild exploration)
+                vf_coef=config.vf_coef,  # Value function coefficient (0.5)
+                # Optimizer
+                learning_rate=config.learning_rate,  # Learning rate (2.5e-4)
+                # Network architecture (defined above)
+                policy_kwargs=create_policy_kwargs(),
+                # Logging
+                tensorboard_log=str(session_path / "tensorboard"),
+                verbose=1,  # Print training info
+                # Reproducibility
+                seed=seed,
+            )
+
         remaining_steps = total_timesteps
 
     # -------------------------------------------------------------------------
@@ -488,14 +593,19 @@ def main() -> None:
     # Streaming Options
     # -------------------------------------------------------------------------
     parser.add_argument(
+        "--curriculum",
+        action="store_true",
+        help="Enable curriculum learning with auto-checkpointing, HM automation, and LSTM",
+    )
+    parser.add_argument(
         "--stream",
         action="store_true",
         help="Enable streaming to shared map visualization server",
     )
     parser.add_argument(
         "--stream-user",
-        default="kantorl-agent",
-        help="Username for stream display (default: kantorl-agent)",
+        default="KantoRL",
+        help="Username for stream display (default: KantoRL)",
     )
     parser.add_argument(
         "--stream-color",
@@ -525,6 +635,7 @@ def main() -> None:
         stream_username=args.stream_user,
         stream_color=args.stream_color,
         stream_sprite_id=args.stream_sprite,
+        use_curriculum=args.curriculum,
     )
 
 

@@ -250,13 +250,47 @@ class KantoConfig:
     stream_sprite_id: int = 0
 
     # Number of steps between coordinate uploads
-    # Lower values = more responsive visualization but more network traffic
-    # 300 steps ≈ 5 seconds at typical training speed
-    stream_interval: int = 300
+    # Lower values = smoother visualization but more network traffic
+    # 30 steps ≈ ~2-3 uploads/sec per env at typical training speed
+    stream_interval: int = 30
 
     # Additional text to display alongside this agent's marker
     # Can be used to show training progress, hyperparameters, etc.
     stream_extra: str = ""
+
+    # =============================================================================
+    # CURRICULUM LEARNING SETTINGS
+    # Settings for auto-checkpointing curriculum, HM automation, and LSTM policy.
+    # When enabled, the agent trains from a pool of saved game states, allowing
+    # it to practice from progressively harder starting points.
+    # =============================================================================
+
+    # Master switch for curriculum learning system
+    # When True, enables: checkpoint pool, CurriculumWrapper, HM automation, LSTM policy
+    # Requires: pip install -e ".[curriculum]" for sb3-contrib (RecurrentPPO)
+    enable_curriculum: bool = False
+
+    # Probability of resetting from a checkpoint vs fresh start (0.0-1.0)
+    # 0.75 means 75% of resets load a saved checkpoint, 25% start from initial state
+    # Higher values emphasize practicing from advanced states
+    # Lower values maintain diversity and prevent forgetting early-game skills
+    checkpoint_weight: float = 0.75
+
+    # Maximum number of saved game states in the checkpoint pool
+    # When exceeded, lowest-progress checkpoints are pruned
+    # 50 provides good diversity without excessive disk usage (~50MB)
+    max_pool_size: int = 50
+
+    # Minimum event flag increase to trigger a milestone checkpoint save
+    # 50 events ≈ defeating a few trainers or completing a route
+    # Lower values save more frequently, higher values save only major milestones
+    milestone_event_delta: int = 50
+
+    # Scale max episode length with badge progress
+    # At 0 badges: max_steps (163,840)
+    # At 8 badges: max_steps * 2.6 (425,984) via +20% per badge
+    # Later game areas are larger and require more steps to traverse
+    dynamic_episode_length: bool = True
 
     def __post_init__(self) -> None:
         """
@@ -301,6 +335,25 @@ class KantoConfig:
             raise ValueError(
                 f"reward_scale should be in (0, 10], got {self.reward_scale}. "
                 "Zero or negative scaling would eliminate or invert rewards."
+            )
+
+        # Validate curriculum settings
+        if not (0.0 <= self.checkpoint_weight <= 1.0):
+            raise ValueError(
+                f"checkpoint_weight must be in [0.0, 1.0], got {self.checkpoint_weight}. "
+                "This is the probability of resetting from a checkpoint."
+            )
+
+        if self.max_pool_size < 1:
+            raise ValueError(
+                f"max_pool_size must be >= 1, got {self.max_pool_size}. "
+                "The checkpoint pool needs at least one slot."
+            )
+
+        if self.milestone_event_delta < 1:
+            raise ValueError(
+                f"milestone_event_delta must be >= 1, got {self.milestone_event_delta}. "
+                "Must require at least 1 new event for a milestone."
             )
 
     @classmethod

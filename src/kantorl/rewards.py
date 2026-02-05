@@ -329,6 +329,26 @@ class RewardFunction(Protocol):
         """
         ...
 
+    def sync_to_state(self, state: GameState) -> None:
+        """
+        Sync internal tracking to a loaded checkpoint state.
+
+        When curriculum learning loads a game state checkpoint, the reward
+        function's tracking variables (max_badges, max_event_count, etc.)
+        must be updated to match, otherwise the agent receives massive
+        spurious rewards for "achieving" progress that was already present
+        in the checkpoint.
+
+        Args:
+            state: GameState snapshot from the loaded checkpoint.
+
+        Notes:
+            - Called by CurriculumWrapper after loading a checkpoint
+            - Must update all delta-based tracking variables
+            - Should NOT clear visited_coords/maps (those track per-episode)
+        """
+        ...
+
 
 # =============================================================================
 # DEFAULT REWARD (MATCHING V2)
@@ -621,6 +641,27 @@ class DefaultReward:
             "total_healing": self.total_healing,
         }
 
+    def sync_to_state(self, state: GameState) -> None:
+        """
+        Sync tracking to a loaded checkpoint state (prevents spurious rewards).
+
+        When loading a curriculum checkpoint that already has N badges and M events,
+        this sets the reward function's internal counters to match. Without this,
+        the first step after loading would generate huge rewards for "earning"
+        progress that was already present in the checkpoint.
+
+        Args:
+            state: GameState snapshot from the loaded checkpoint.
+
+        Example:
+            >>> # Loading a checkpoint with 3 badges and 200 events
+            >>> state = GameState.from_pyboy(pyboy)
+            >>> reward_fn.sync_to_state(state)
+            >>> # First step now produces ~0 reward instead of huge spurious reward
+        """
+        self.max_badges = state.badges
+        self.max_event_count = state.event_count
+
 
 # =============================================================================
 # SIMPLE REWARD VARIANTS
@@ -705,6 +746,10 @@ class BadgesOnlyReward:
     def get_info(self) -> dict:
         """Get reward breakdown for logging."""
         return {"reward_breakdown": self.last_rewards.copy(), "max_badges": self.max_badges}
+
+    def sync_to_state(self, state: GameState) -> None:
+        """Sync tracking to a loaded checkpoint state (prevents spurious rewards)."""
+        self.max_badges = state.badges
 
 
 @dataclass
@@ -800,6 +845,10 @@ class ExplorationReward:
             "unique_coords": len(self.visited_coords),
             "unique_maps": len(self.visited_maps),
         }
+
+    def sync_to_state(self, state: GameState) -> None:
+        """Sync tracking to a loaded checkpoint state (no-op for exploration reward)."""
+        # ExplorationReward has no delta-based tracking that needs syncing
 
 
 # =============================================================================

@@ -37,6 +37,7 @@ dev = ["pytest", "ruff", "mypy"]
 wandb = ["wandb"]
 stream = ["websockets>=12.0"]
 benchmark = ["optuna>=3.0", "pyyaml>=6.0"]
+curriculum = ["sb3-contrib>=2.0.0"]
 
 [project.scripts]
 kantorl = "kantorl.__main__:main"

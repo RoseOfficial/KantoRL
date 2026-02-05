@@ -169,6 +169,13 @@ def main() -> int:
         help="Random seed for reproducibility (default: 42)",
     )
 
+    # Curriculum learning option
+    train_parser.add_argument(
+        "--curriculum",
+        action="store_true",
+        help="Enable curriculum learning with auto-checkpointing, HM automation, and LSTM",
+    )
+
     # Streaming visualization options
     # These enable real-time visualization of training progress
     train_parser.add_argument(
@@ -178,8 +185,8 @@ def main() -> int:
     )
     train_parser.add_argument(
         "--stream-user",
-        default="kantorl-agent",
-        help="Username for stream display (default: kantorl-agent)",
+        default="KantoRL",
+        help="Username for stream display (default: KantoRL)",
     )
     train_parser.add_argument(
         "--stream-color",
@@ -343,8 +350,8 @@ def main() -> int:
     )
     benchmark_single_parser.add_argument(
         "--stream-user",
-        default="kantorl-bench",
-        help="Username for stream display (default: kantorl-bench)",
+        default="KantoRL-bench",
+        help="Username for stream display (default: KantoRL-bench)",
     )
     benchmark_single_parser.add_argument(
         "--stream-color",
@@ -452,6 +459,7 @@ def main() -> int:
             stream_username=args.stream_user,
             stream_color=args.stream_color,
             stream_sprite_id=args.stream_sprite,
+            use_curriculum=args.curriculum,
         )
         return 0  # Success
 

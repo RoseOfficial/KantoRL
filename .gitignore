@@ -57,6 +57,7 @@ htmlcov/
 
 # Training artifacts
 runs/
+runs_*/
 checkpoints/
 tensorboard/
 wandb/

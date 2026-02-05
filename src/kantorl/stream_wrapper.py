@@ -178,7 +178,7 @@ class StreamWrapper(gym.Wrapper):
     def __init__(
         self,
         env: gym.Env,
-        username: str = "kantorl-agent",
+        username: str = "KantoRL",
         color: str = "#ff0000",
         sprite_id: int = 0,
         stream_interval: int = 300,
@@ -203,7 +203,7 @@ class StreamWrapper(gym.Wrapper):
                 attribute for reading game memory (i.e., KantoRedEnv).
             username: Display name for this agent on the shared map.
                      Visible to other users viewing the visualization.
-                     Default: "kantorl-agent"
+                     Default: "KantoRL"
             color: Hex color code for the agent's trail/marker on the map.
                   Format: "#RRGGBB" (e.g., "#0033ff" for blue).
                   Default: "#ff0000" (red).
@@ -386,10 +386,14 @@ class StreamWrapper(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
 
         # Stream coordinates if enabled and pyboy is available
-        if self.enabled and hasattr(self.env, 'pyboy'):
+        # Use self.unwrapped to bypass any intermediate wrappers (e.g.
+        # CurriculumWrapper) — @property descriptors on KantoRedEnv are
+        # not forwarded by gym.Wrapper.__getattr__ in Gymnasium 1.x.
+        base_env = self.unwrapped
+        if self.enabled and hasattr(base_env, 'pyboy'):
             # Get current position from game memory
             # These addresses are defined in memory.py
-            pyboy = self.env.pyboy
+            pyboy = base_env.pyboy
             x_pos = memory.read_byte(pyboy, memory.ADDR_PLAYER_X)
             y_pos = memory.read_byte(pyboy, memory.ADDR_PLAYER_Y)
             map_id = memory.read_byte(pyboy, memory.ADDR_MAP_ID)

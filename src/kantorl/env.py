@@ -924,6 +924,7 @@ def make_env(
     seed: int = 0,
     reward_fn: str = "default",
     enable_streaming: bool = False,
+    enable_curriculum: bool = False,
 ) -> callable:
     """
     Factory function for creating environments in vectorized setup.
@@ -938,6 +939,7 @@ def make_env(
         seed: Base random seed (actual seed = seed + rank).
         reward_fn: Reward function name ('default', 'badges_only', 'exploration').
         enable_streaming: Whether to wrap with StreamWrapper for visualization.
+        enable_curriculum: Whether to wrap with CurriculumWrapper for curriculum learning.
 
     Returns:
         Callable that returns an initialized Gymnasium environment.
@@ -969,6 +971,17 @@ def make_env(
 
         # Reset with unique seed based on rank
         env.reset(seed=seed + rank)
+
+        # Optionally wrap with CurriculumWrapper for curriculum learning
+        # Must come before StreamWrapper since it modifies game state
+        if enable_curriculum and cfg.enable_curriculum:
+            from kantorl.curriculum import CurriculumWrapper
+
+            env = CurriculumWrapper(
+                env,
+                pool_dir=cfg.session_path / "checkpoint_pool",
+                config=cfg,
+            )
 
         # Optionally wrap with StreamWrapper for visualization
         if enable_streaming and cfg.enable_streaming:
