@@ -169,7 +169,7 @@ def train(
     reward_fn: str = "default",
     seed: int = 42,
     enable_streaming: bool = False,
-    stream_username: str = "kantorl-agent",
+    stream_username: str = "KantoRL",
     stream_color: str = "#ff0000",
     stream_sprite_id: int = 0,
 ) -> None:

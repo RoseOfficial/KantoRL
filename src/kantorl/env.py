@@ -975,8 +975,8 @@ def make_env(
             from kantorl.stream_wrapper import StreamWrapper
 
             # Create unique username for each parallel environment
-            # Always append rank for consistent naming (e.g., "agent-0", "agent-1")
-            username = f"{cfg.stream_username}-{rank}"
+            # Always append rank for consistent naming (e.g., "KantoRL_1", "KantoRL_2")
+            username = f"{cfg.stream_username}_{rank + 1}"
 
             # Wrap environment with streaming capability
             # Pass rank and n_envs so StreamWrapper can auto-generate a unique

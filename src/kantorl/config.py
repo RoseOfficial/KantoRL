@@ -239,7 +239,7 @@ class KantoConfig:
 
     # Display name for this agent on the shared map
     # Should be unique to identify different training runs
-    stream_username: str = "kantorl-agent"
+    stream_username: str = "KantoRL"
 
     # Hex color code for this agent's marker on the map
     # Format: "#RRGGBB" (e.g., "#ff0000" for red)

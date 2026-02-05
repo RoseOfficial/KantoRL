@@ -420,7 +420,7 @@ class BenchmarkConfig:
 
     # Streaming configuration for real-time visualization
     enable_streaming: bool = False
-    stream_username: str = "kantorl-bench"
+    stream_username: str = "KantoRL"
     stream_color: str = "#ff0000"
     stream_sprite_id: int = 0
 
@@ -485,7 +485,7 @@ class BenchmarkRunner:
         early_stop: bool = True,
         save_state_path: str | None = None,
         enable_streaming: bool = False,
-        stream_username: str = "kantorl-bench",
+        stream_username: str = "KantoRL",
         stream_color: str = "#ff0000",
         stream_sprite_id: int = 0,
         verbose: int = 1,
