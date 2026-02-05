@@ -43,12 +43,14 @@ Dependencies:
 from __future__ import annotations
 
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from kantorl.benchmarks.metrics import BenchmarkResult
@@ -56,6 +58,11 @@ from kantorl.benchmarks.scenarios import (
     MilestoneTier,
     check_milestone_reached,
     get_tier_thresholds,
+)
+from kantorl.callbacks import (
+    PerformanceCallback,
+    StallDetectionCallback,
+    TensorboardCallback,
 )
 from kantorl.config import KantoConfig
 from kantorl.env import make_env
@@ -198,6 +205,178 @@ class BenchmarkTrackingCallback(BaseCallback):
             "total_healing": self.total_healing,
             "total_wall_time": time.time() - self.start_time if self.start_time else 0.0,
         }
+
+
+# =============================================================================
+# BENCHMARK PROGRESS CALLBACK
+# =============================================================================
+
+
+class BenchmarkProgressCallback(BaseCallback):
+    """
+    Compact console progress callback for benchmark runs.
+
+    Prints a single summary line every ``log_freq`` steps showing the best
+    badges, events, and exploration tiles observed so far, plus the current
+    mean step reward and throughput (steps/sec).
+
+    Output format::
+
+        [50K] badges:0 events:12 tiles:45 | rew:1.23 | 1,456 sps
+        [100K] badges:0 events:28 tiles:89 | rew:2.10 | 1,502 sps
+
+    This fills the gap between per-metric TensorBoard callbacks and the sparse
+    badge milestone prints from :class:`BenchmarkTrackingCallback`.
+
+    Attributes:
+        log_freq: Print a progress line every N training steps.
+        max_badges: Best badge count seen across all envs (cumulative).
+        max_events: Best event count seen across all envs (cumulative).
+        max_tiles: Best exploration tile count seen across all envs (cumulative).
+        start_time: Wall-clock time when training started.
+        last_log_time: Timestamp of the last progress line (for sps calc).
+        last_log_steps: Step count at the last progress line.
+
+    Example:
+        >>> callback = BenchmarkProgressCallback(log_freq=50_000, verbose=1)
+        >>> model.learn(total_timesteps=500_000, callback=callback)
+        [50K] badges:0 events:8 tiles:34 | rew:0.45 | 1,523 sps
+
+    Notes:
+        - Metrics are cumulative maximums (best ever, not windowed).
+        - Mean reward is a rolling average of per-step rewards collected
+          directly from the training loop (no Monitor wrapper needed).
+        - This callback does NOT log to TensorBoard — use TensorboardCallback
+          for that.
+    """
+
+    def __init__(self, log_freq: int = 50_000, verbose: int = 1):
+        """
+        Initialize the benchmark progress callback.
+
+        Args:
+            log_freq: Print a progress summary every N training steps.
+                     50,000 is a good balance between visibility and spam.
+            verbose: Verbosity level. 1=print progress lines to console.
+        """
+        super().__init__(verbose)
+        self.log_freq = log_freq
+
+        # Cumulative best-ever metrics across all envs
+        self.max_badges: int = 0
+        self.max_events: int = 0
+        self.max_tiles: int = 0
+
+        # Rolling window of recent step rewards for mean reward display.
+        # Collects per-env rewards each step; 10K entries covers ~1K steps
+        # with 8 envs, giving a smooth rolling average.
+        self._recent_rewards: deque[float] = deque(maxlen=10_000)
+
+        # Timing state for steps-per-second calculation
+        self.start_time: float = 0.0
+        self.last_log_time: float = 0.0
+        self.last_log_steps: int = 0
+
+    def _on_training_start(self) -> None:
+        """Called when training starts. Records start time for sps calculation."""
+        self.start_time = time.time()
+        self.last_log_time = self.start_time
+        self.last_log_steps = 0
+
+    def _on_step(self) -> bool:
+        """
+        Called after each training step. Tracks maximums and prints progress.
+
+        Collects best-ever badge/event/tile counts from env infos, then
+        prints a compact summary at each ``log_freq`` interval.
+
+        Returns:
+            True to continue training (never stops training).
+        """
+        # Update cumulative maximums from all environments
+        for info in self.locals.get("infos", []):
+            self.max_badges = max(self.max_badges, info.get("badges", 0))
+            self.max_events = max(self.max_events, info.get("events", 0))
+            self.max_tiles = max(self.max_tiles, info.get("unique_coords", 0))
+
+        # Collect per-step rewards directly from the training loop.
+        # self.locals["rewards"] is a numpy array of shape (n_envs,) containing
+        # the reward each env returned this step. This avoids depending on
+        # SB3's ep_info_buffer (which requires a Monitor wrapper).
+        rewards = self.locals.get("rewards")
+        if rewards is not None:
+            self._recent_rewards.extend(rewards.tolist())
+
+        # Print progress at regular intervals
+        if self.num_timesteps % self.log_freq == 0 and self.verbose:
+            # Format step count as compact string (e.g., 50K, 1.05M)
+            step_str = _format_steps(self.num_timesteps)
+
+            # Mean reward from rolling window of recent step rewards
+            rew_str = "---"
+            if self._recent_rewards:
+                rew_str = f"{np.mean(self._recent_rewards):.2f}"
+
+            # Calculate steps/sec since last log
+            now = time.time()
+            elapsed = now - self.last_log_time
+            steps_done = self.num_timesteps - self.last_log_steps
+            sps = int(steps_done / max(elapsed, 1e-6))
+
+            print(
+                f"[{step_str}] badges:{self.max_badges} "
+                f"events:{self.max_events} tiles:{self.max_tiles} "
+                f"| rew:{rew_str} | {sps:,} sps"
+            )
+
+            # Update timing state
+            self.last_log_time = now
+            self.last_log_steps = self.num_timesteps
+
+        return True
+
+
+def _format_steps(steps: int) -> str:
+    """
+    Format a step count as a compact human-readable string.
+
+    Uses integer arithmetic to pick the right precision so that labels
+    at 50K intervals are always unique (no duplicate rounding).
+
+    Args:
+        steps: Number of training steps.
+
+    Returns:
+        Compact string like "50K", "1.05M", or "100" for small values.
+
+    Examples:
+        >>> _format_steps(50_000)
+        '50K'
+        >>> _format_steps(1_050_000)
+        '1.05M'
+        >>> _format_steps(1_500_000)
+        '1.5M'
+        >>> _format_steps(2_000_000)
+        '2M'
+        >>> _format_steps(100)
+        '100'
+    """
+    if steps >= 1_000_000:
+        # Use integer arithmetic to avoid floating-point rounding ambiguity
+        if steps % 1_000_000 == 0:
+            return f"{steps // 1_000_000}M"
+        elif steps % 100_000 == 0:
+            # Clean tenths: 1.1M, 1.5M, etc.
+            return f"{steps / 1_000_000:.1f}M"
+        else:
+            # Finer intervals (e.g., 50K): 1.05M, 1.15M, etc.
+            return f"{steps / 1_000_000:.2f}M"
+    elif steps >= 1_000:
+        if steps % 1_000 == 0:
+            return f"{steps // 1_000}K"
+        else:
+            return f"{steps / 1_000:.1f}K"
+    return str(steps)
 
 
 # =============================================================================
@@ -420,7 +599,8 @@ class BenchmarkRunner:
                 verbose=self.verbose,
             )
 
-            # Create PPO model
+            # Create PPO model with TensorBoard logging enabled
+            tb_path = kanto_config.session_path / "tensorboard"
             model = PPO(
                 "MultiInputPolicy",
                 env,
@@ -433,14 +613,29 @@ class BenchmarkRunner:
                 ent_coef=kanto_config.ent_coef,
                 vf_coef=kanto_config.vf_coef,
                 learning_rate=kanto_config.learning_rate,
+                tensorboard_log=str(tb_path),
                 verbose=0 if self.verbose < 2 else 1,
                 seed=seed,
             )
 
+            # Compose callback stack:
+            #   tracking_callback  - badge milestone timing (existing)
+            #   TensorboardCallback - game metrics (badges/events/tiles) to TB
+            #   PerformanceCallback - steps/sec to TB
+            #   StallDetectionCallback - console warnings when stuck
+            #   BenchmarkProgressCallback - compact console summary line
+            callbacks = CallbackList([
+                tracking_callback,
+                TensorboardCallback(log_freq=1000, verbose=0),
+                PerformanceCallback(log_freq=10_000, verbose=0),
+                StallDetectionCallback(check_freq=50_000, verbose=1),
+                BenchmarkProgressCallback(log_freq=50_000, verbose=self.verbose),
+            ])
+
             # Run training
             model.learn(
                 total_timesteps=self.benchmark_config.max_steps,
-                callback=tracking_callback,
+                callback=callbacks,
                 progress_bar=self.verbose > 0,
             )
 

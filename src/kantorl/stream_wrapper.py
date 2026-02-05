@@ -402,7 +402,6 @@ class StreamWrapper(gym.Wrapper):
             self.step_counter += 1
             if self.step_counter >= self.stream_interval:
                 # Upload accumulated coordinates
-                print(f"StreamWrapper: Uploading {len(self.coord_list)} coordinates (step {self.step_counter})")
                 self._upload_coordinates(info)
 
                 # Reset buffer and counter
