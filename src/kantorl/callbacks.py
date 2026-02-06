@@ -37,12 +37,17 @@ Dependencies:
     - pathlib: For checkpoint path handling
 """
 
+from __future__ import annotations
+
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
+
+if TYPE_CHECKING:
+    import wandb as wandb_mod
 
 
 # =============================================================================
@@ -543,3 +548,184 @@ class PerformanceCallback(BaseCallback):
             self.last_steps = self.num_timesteps
 
         return True
+
+
+# =============================================================================
+# WANDB LOGGING CALLBACK
+# =============================================================================
+
+
+class WandbCallback(BaseCallback):
+    """
+    Log game metrics and PPO losses to Weights & Biases.
+
+    Runs alongside TensorboardCallback to provide the same game-specific
+    metrics (badges, events, exploration) plus PPO loss metrics to wandb
+    for experiment tracking and comparison dashboards.
+
+    Metric Hierarchy:
+        - game/*: Pokemon Red progress (badges_mean, events_mean, explore_tiles_mean)
+        - losses/*: PPO training losses (policy_loss, value_loss, entropy_loss, etc.)
+        - performance/*: Training speed (sps = steps per second)
+        - curriculum/*: Curriculum learning stats (pool_size, best_progress, etc.)
+
+    Design Decisions:
+        - Time-throttled logging (every N seconds) instead of step-based,
+          to avoid overwhelming the wandb API with high-frequency uploads.
+          This matches the pattern used by pokemonred_puffer.
+        - Collects metrics from self.locals["infos"] (same source as
+          TensorboardCallback) and self.logger.name_to_value (PPO losses).
+        - Does NOT replace TensorBoard — both run simultaneously.
+
+    Attributes:
+        wandb_run: Reference to the active wandb run for logging.
+        log_interval_sec: Minimum seconds between wandb.log() calls.
+        last_log_time: Timestamp of the last wandb.log() call.
+
+    Example:
+        >>> import wandb
+        >>> run = wandb.init(project="kantorl")
+        >>> callback = WandbCallback(wandb_run=run, log_interval_sec=5.0)
+    """
+
+    def __init__(
+        self,
+        wandb_run: wandb_mod.sdk.wandb_run.Run,
+        log_interval_sec: float = 5.0,
+        verbose: int = 0,
+    ) -> None:
+        """
+        Initialize the wandb callback.
+
+        Args:
+            wandb_run: Active wandb run object from wandb.init().
+                       Used for logging metrics via wandb_run.log().
+            log_interval_sec: Minimum seconds between wandb.log() calls.
+                             5.0 seconds is a good balance: frequent enough
+                             for live dashboard updates, infrequent enough to
+                             avoid API rate limits.
+            verbose: Verbosity level (0=silent, 1=print log events).
+        """
+        super().__init__(verbose)
+        self.wandb_run = wandb_run
+        self.log_interval_sec = log_interval_sec
+        self.last_log_time = time.time()
+
+        # Metric buffers — accumulate between log calls, then aggregate
+        self.badges_buffer: list[int] = []
+        self.events_buffer: list[int] = []
+        self.coords_buffer: list[int] = []
+        self.curriculum_pool_sizes: list[int] = []
+        self.curriculum_best_progress: list[int] = []
+
+    def _on_step(self) -> bool:
+        """
+        Called after each training step. Collects metrics and logs to wandb.
+
+        This method:
+        1. Collects game metrics from info dicts (every step)
+        2. Checks if enough time has elapsed since last log
+        3. If so, aggregates buffered metrics + grabs PPO losses + logs to wandb
+
+        Returns:
+            True to continue training (never stops training).
+        """
+        # -----------------------------------------------------------------
+        # Phase 1: Collect metrics from every env (runs every step)
+        # -----------------------------------------------------------------
+        # self.locals["infos"] is a list with one info dict per parallel env.
+        # Each info dict contains game-state metrics set by KantoRedEnv.step().
+        for info in self.locals.get("infos", []):
+            if "badges" in info:
+                self.badges_buffer.append(info["badges"])
+            if "events" in info:
+                self.events_buffer.append(info["events"])
+            if "unique_coords" in info:
+                self.coords_buffer.append(info["unique_coords"])
+            # Curriculum metrics (only present when curriculum mode is active)
+            if "curriculum_pool_size" in info:
+                self.curriculum_pool_sizes.append(info["curriculum_pool_size"])
+            if "curriculum_best_progress" in info:
+                self.curriculum_best_progress.append(info["curriculum_best_progress"])
+
+        # -----------------------------------------------------------------
+        # Phase 2: Ship to wandb if enough time has elapsed
+        # -----------------------------------------------------------------
+        now = time.time()
+        elapsed = now - self.last_log_time
+        if elapsed < self.log_interval_sec or not self.badges_buffer:
+            return True
+
+        # Build the metrics dict — game progress
+        metrics: dict[str, float | int] = {
+            "game/badges_mean": float(np.mean(self.badges_buffer)),
+            "game/events_mean": float(np.mean(self.events_buffer))
+            if self.events_buffer
+            else 0.0,
+            "game/explore_tiles_mean": float(np.mean(self.coords_buffer))
+            if self.coords_buffer
+            else 0.0,
+        }
+
+        # PPO losses — only populated after an optimizer update, not every step.
+        # self.logger.name_to_value is SB3's internal metric store.
+        loss_map = {
+            "train/policy_gradient_loss": "losses/policy_loss",
+            "train/value_loss": "losses/value_loss",
+            "train/entropy_loss": "losses/entropy_loss",
+            "train/approx_kl": "losses/approx_kl",
+            "train/clip_fraction": "losses/clip_fraction",
+        }
+        for sb3_key, wandb_key in loss_map.items():
+            value = self.logger.name_to_value.get(sb3_key)
+            if value is not None:
+                metrics[wandb_key] = float(value)
+
+        # Training speed (steps per second since last log)
+        steps_since = self.num_timesteps - getattr(self, "_last_log_steps", 0)
+        metrics["performance/sps"] = steps_since / max(elapsed, 1e-6)
+        self._last_log_steps = self.num_timesteps
+
+        # Curriculum metrics
+        if self.curriculum_pool_sizes:
+            metrics["curriculum/pool_size"] = max(self.curriculum_pool_sizes)
+        if self.curriculum_best_progress:
+            metrics["curriculum/best_progress"] = max(self.curriculum_best_progress)
+
+        # Single wandb.log() call with all metrics for this interval
+        self.wandb_run.log(metrics, step=self.num_timesteps)
+
+        # Reset buffers and timer for next interval
+        self.last_log_time = now
+        self.badges_buffer.clear()
+        self.events_buffer.clear()
+        self.coords_buffer.clear()
+        self.curriculum_pool_sizes.clear()
+        self.curriculum_best_progress.clear()
+
+        return True
+
+    def _on_training_end(self) -> None:
+        """
+        Called when training finishes. Flushes any remaining buffered metrics.
+
+        Ensures the final batch of collected metrics is logged to wandb
+        even if the time interval hasn't elapsed yet. This prevents losing
+        data from the last few seconds of training.
+        """
+        # Force-log any remaining buffered data
+        if self.badges_buffer:
+            metrics: dict[str, float | int] = {
+                "game/badges_mean": float(np.mean(self.badges_buffer)),
+                "game/events_mean": float(np.mean(self.events_buffer))
+                if self.events_buffer
+                else 0.0,
+                "game/explore_tiles_mean": float(np.mean(self.coords_buffer))
+                if self.coords_buffer
+                else 0.0,
+            }
+            if self.curriculum_pool_sizes:
+                metrics["curriculum/pool_size"] = max(self.curriculum_pool_sizes)
+            if self.curriculum_best_progress:
+                metrics["curriculum/best_progress"] = max(self.curriculum_best_progress)
+            self.wandb_run.log(metrics, step=self.num_timesteps)

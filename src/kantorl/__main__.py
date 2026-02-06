@@ -200,6 +200,28 @@ def main() -> int:
         help="Sprite ID (0-50) for stream display (default: 0)",
     )
 
+    # Wandb experiment tracking options
+    train_parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Enable Weights & Biases experiment tracking",
+    )
+    train_parser.add_argument(
+        "--wandb-project",
+        default="kantorl",
+        help="wandb project name (default: kantorl)",
+    )
+    train_parser.add_argument(
+        "--wandb-entity",
+        default=None,
+        help="wandb entity/team (default: personal account)",
+    )
+    train_parser.add_argument(
+        "--wandb-group",
+        default=None,
+        help="wandb run group for organizing experiments",
+    )
+
     # -------------------------------------------------------------------------
     # Eval Command
     # -------------------------------------------------------------------------
@@ -460,6 +482,10 @@ def main() -> int:
             stream_color=args.stream_color,
             stream_sprite_id=args.stream_sprite,
             use_curriculum=args.curriculum,
+            enable_wandb=args.wandb,
+            wandb_project=args.wandb_project,
+            wandb_entity=args.wandb_entity,
+            wandb_group=args.wandb_group,
         )
         return 0  # Success
 

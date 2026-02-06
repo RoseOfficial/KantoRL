@@ -78,12 +78,16 @@ References:
     - PokemonRedExperiments: https://github.com/PWhiddy/PokemonRedExperiments
 """
 
+from __future__ import annotations
+
 import argparse
+import dataclasses
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import torch
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CallbackList
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from kantorl.callbacks import (
@@ -91,9 +95,13 @@ from kantorl.callbacks import (
     PerformanceCallback,
     StallDetectionCallback,
     TensorboardCallback,
+    WandbCallback,
 )
 from kantorl.config import KantoConfig
 from kantorl.env import make_env
+
+if TYPE_CHECKING:
+    import wandb
 
 
 # =============================================================================
@@ -225,6 +233,10 @@ def train(
     stream_color: str = "#ff0000",
     stream_sprite_id: int = 0,
     use_curriculum: bool = False,
+    enable_wandb: bool = False,
+    wandb_project: str = "kantorl",
+    wandb_entity: str | None = None,
+    wandb_group: str | None = None,
 ) -> None:
     """
     Run PPO training on Pokemon Red.
@@ -270,6 +282,12 @@ def train(
         use_curriculum: Enable curriculum learning with auto-checkpointing,
                        HM automation, and LSTM policy (RecurrentPPO).
                        Requires: pip install -e ".[curriculum]"
+        enable_wandb: Enable Weights & Biases experiment tracking.
+                     Runs alongside TensorBoard, not replacing it.
+                     Requires: pip install -e ".[wandb]"
+        wandb_project: wandb project name for grouping runs. Default "kantorl".
+        wandb_entity: wandb entity (team/username). None uses personal default.
+        wandb_group: Optional run group for organizing related experiments.
 
     Side Effects:
         - Creates session_path directory if it doesn't exist
@@ -316,7 +334,31 @@ def train(
         stream_color=stream_color,
         stream_sprite_id=stream_sprite_id,
         enable_curriculum=use_curriculum,
+        enable_wandb=enable_wandb,
+        wandb_project=wandb_project,
+        wandb_entity=wandb_entity,
+        wandb_group=wandb_group,
     )
+
+    # -------------------------------------------------------------------------
+    # Wandb Initialization (optional)
+    # -------------------------------------------------------------------------
+    # Initialize wandb before model creation so the full config is captured.
+    # The run object is passed to WandbCallback for metric logging.
+    wandb_run: wandb.sdk.wandb_run.Run | None = None
+    if enable_wandb:
+        import wandb as _wandb
+
+        wandb_run = _wandb.init(
+            project=wandb_project,
+            entity=wandb_entity,
+            group=wandb_group,
+            config=dataclasses.asdict(config),
+            name=session_path.name,  # type: ignore[attr-defined]
+            resume="allow",
+            save_code=True,
+        )
+        print(f"Wandb run: {wandb_run.url}")
 
     print(f"Creating {n_envs} parallel environments...")
 
@@ -456,7 +498,7 @@ def train(
     # -------------------------------------------------------------------------
     # Create list of callbacks that execute during training
     # Callbacks provide hooks for checkpointing, logging, and monitoring
-    callbacks = CallbackList([
+    callback_list: list[BaseCallback] = [
         # Save model checkpoints periodically
         # Saves model_100000.zip, model_200000.zip, etc.
         CumulativeCheckpointCallback(
@@ -472,7 +514,13 @@ def train(
         # Log training speed (steps/second)
         # Helps identify performance issues
         PerformanceCallback(log_freq=10_000),
-    ])
+    ]
+
+    # Optionally add wandb callback for experiment tracking
+    if wandb_run is not None:
+        callback_list.append(WandbCallback(wandb_run=wandb_run))
+
+    callbacks = CallbackList(callback_list)
 
     # -------------------------------------------------------------------------
     # Training Loop
@@ -503,6 +551,20 @@ def train(
         final_path = session_path / "checkpoints" / f"model_{model.num_timesteps}.zip"
         model.save(final_path)
         print(f"Saved final model: {final_path}")
+
+        # Upload final model as wandb Artifact for easy access/download
+        if wandb_run is not None:
+            import wandb as _wandb
+
+            artifact = _wandb.Artifact(
+                name=f"model-{session_path.name}",  # type: ignore[attr-defined]
+                type="model",
+                description=f"Final KantoRL model at step {model.num_timesteps:,}",
+            )
+            artifact.add_file(str(final_path))
+            wandb_run.log_artifact(artifact)
+            wandb_run.finish()
+            print("Wandb run finished and artifact uploaded.")
 
         # Close the vectorized environment
         # This properly shuts down all subprocess workers
@@ -619,6 +681,30 @@ def main() -> None:
         help="Sprite ID for stream display, 0-50 (default: 0)",
     )
 
+    # -------------------------------------------------------------------------
+    # Wandb Options
+    # -------------------------------------------------------------------------
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Enable Weights & Biases experiment tracking",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        default="kantorl",
+        help="wandb project name (default: kantorl)",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        default=None,
+        help="wandb entity/team (default: personal account)",
+    )
+    parser.add_argument(
+        "--wandb-group",
+        default=None,
+        help="wandb run group for organizing experiments",
+    )
+
     # Parse arguments
     args = parser.parse_args()
 
@@ -636,6 +722,10 @@ def main() -> None:
         stream_color=args.stream_color,
         stream_sprite_id=args.stream_sprite,
         use_curriculum=args.curriculum,
+        enable_wandb=args.wandb,
+        wandb_project=args.wandb_project,
+        wandb_entity=args.wandb_entity,
+        wandb_group=args.wandb_group,
     )
 
 

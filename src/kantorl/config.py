@@ -292,6 +292,29 @@ class KantoConfig:
     # Later game areas are larger and require more steps to traverse
     dynamic_episode_length: bool = True
 
+    # =============================================================================
+    # WANDB SETTINGS
+    # Optional Weights & Biases experiment tracking alongside TensorBoard.
+    # When enabled, game metrics, PPO losses, and training config are logged
+    # to wandb for experiment comparison and dashboard visualization.
+    # Requires: pip install -e ".[wandb]"
+    # =============================================================================
+
+    # Master switch for wandb experiment tracking
+    # When False, wandb is not imported or initialized
+    enable_wandb: bool = False
+
+    # wandb project name for grouping runs
+    # All training runs with the same project appear together in the wandb UI
+    wandb_project: str = "kantorl"
+
+    # wandb entity (team or username) — None uses the personal default account
+    wandb_entity: str | None = None
+
+    # Optional run grouping for organizing related experiments
+    # e.g., "curriculum_sweep" or "lr_comparison"
+    wandb_group: str | None = None
+
     def __post_init__(self) -> None:
         """
         Validate configuration after initialization.
