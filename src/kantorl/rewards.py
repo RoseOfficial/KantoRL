@@ -61,6 +61,8 @@ References:
     - Gymnasium reward design: https://gymnasium.farama.org/tutorials/reward_shaping/
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
@@ -72,7 +74,6 @@ if TYPE_CHECKING:
     from pyboy import PyBoy
 
 from kantorl import memory
-
 
 # =============================================================================
 # GAME STATE SNAPSHOT
@@ -174,7 +175,12 @@ class GameState:
     step_count: int = 0
 
     @classmethod
-    def from_pyboy(cls, pyboy: "PyBoy", step_count: int = 0) -> "GameState":
+    def from_pyboy(
+        cls,
+        pyboy: PyBoy,
+        step_count: int = 0,
+        event_count: int | None = None,
+    ) -> GameState:
         """
         Create a state snapshot from a PyBoy emulator instance.
 
@@ -187,6 +193,10 @@ class GameState:
                    Must have a Pokemon Red ROM loaded and running.
             step_count: Current step count for this episode. Defaults to 0.
                        Pass the environment's internal step counter here.
+            event_count: Pre-computed event flag count, if available. When the
+                        caller has already read event flags (e.g., for the
+                        observation), passing the count here avoids a redundant
+                        312-byte memory read.
 
         Returns:
             A new GameState instance populated with current game values.
@@ -209,12 +219,16 @@ class GameState:
         # Used for healing rewards
         current_hp, max_hp = memory.get_total_party_hp(pyboy)
 
+        # Use pre-computed event count if provided, otherwise read from memory
+        if event_count is None:
+            event_count = memory.count_event_flags(pyboy)
+
         return cls(
             map_id=map_id,
             x=x,
             y=y,
             badges=memory.get_badges(pyboy),  # Count of badges (0-8)
-            event_count=memory.count_event_flags(pyboy),  # Total events triggered
+            event_count=event_count,  # Total events triggered
             current_hp=current_hp,
             max_hp=max_hp,
             step_count=step_count,

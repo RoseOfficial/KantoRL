@@ -71,9 +71,9 @@ class KantoConfig:
         n_envs (int): Number of parallel environments for vectorized training.
             More envs = more diverse experience but higher memory usage.
         n_steps (int): Steps collected per environment before each PPO update.
-            Total batch = n_envs * n_steps = 16 * 64 = 1024 steps.
+            Total batch = n_envs * n_steps = 16 * 128 = 2048 steps.
         batch_size (int): Minibatch size for PPO gradient updates.
-            Should divide evenly into n_envs * n_steps.
+            Must divide evenly into n_envs * n_steps.
 
         learning_rate (float): Adam optimizer learning rate for PPO.
         gamma (float): Discount factor for future rewards.
@@ -88,6 +88,7 @@ class KantoConfig:
         stream_color (str): Hex color code for map marker (e.g., "#0033ff").
         stream_sprite_id (int): Character sprite ID (0-50) for map display.
         stream_interval (int): Steps between coordinate uploads to server.
+            At ~80 sps/env, 100 gives smooth ~1.2s upload cadence.
         stream_extra (str): Additional text to display on the map.
 
     Example:
@@ -184,13 +185,15 @@ class KantoConfig:
     n_envs: int = 16
 
     # Steps to collect per environment before each PPO update
-    # Total experiences per update = n_envs * n_steps = 16 * 64 = 1024
-    n_steps: int = 64
+    # Total experiences per update = n_envs * n_steps = 16 * 128 = 2048
+    # Longer rollouts give better advantage estimates (GAE sees more future)
+    # and amortize per-iteration fixed costs (logging, callbacks, buffer alloc)
+    n_steps: int = 128
 
     # Minibatch size for PPO gradient updates
-    # Should divide evenly into (n_envs * n_steps)
-    # Smaller batches = noisier gradients but more updates per epoch
-    batch_size: int = 256
+    # Must divide evenly into (n_envs * n_steps): 2048/512 = 4, 1024/512 = 2
+    # Larger batches → fewer gradient steps → better GPU utilization
+    batch_size: int = 512
 
     # Learning rate for the Adam optimizer
     # 3e-4 is the standard PPO learning rate from the original paper
@@ -225,7 +228,9 @@ class KantoConfig:
     # Number of optimization epochs per PPO update
     # More epochs = more thorough optimization of collected experience
     # But too many can cause overfitting to the current batch
-    n_epochs: int = 4
+    # 3 epochs with batch_size=512 yields 6 gradient steps per iteration
+    # (at n_envs=8) — slightly fewer than before but with larger, stabler batches
+    n_epochs: int = 3
 
     # =============================================================================
     # STREAMING SETTINGS
@@ -250,12 +255,12 @@ class KantoConfig:
     stream_sprite_id: int = 0
 
     # Number of steps between coordinate uploads.
-    # The transdimensional.xyz server animates each message's coords over a
-    # fixed time window — more coords per message = faster apparent movement.
-    # 256 coords/message at ~69 steps/sec ≈ one upload every ~3.7s per env,
-    # with enough data points for smooth walking-pace animation on the map.
-    # Non-blocking sender thread ensures no training throughput impact.
-    stream_interval: int = 256
+    # The transdimensional.xyz visualizer animates each batch of coordinates
+    # over an adaptive time window. Larger batches = smoother animation.
+    # 500 matches pokemonred_puffer's proven value. At ~80 sps/env, each
+    # batch contains ~500 coordinates and is sent every ~6 seconds.
+    # The synchronous send (~10ms) has negligible impact on training FPS.
+    stream_interval: int = 500
 
     # Additional text to display alongside this agent's marker
     # Can be used to show training progress, hyperparameters, etc.

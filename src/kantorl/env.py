@@ -44,7 +44,7 @@ Dependencies:
     - gymnasium: For the Gym environment interface
     - pyboy: GameBoy emulator for running Pokemon Red
     - numpy: For array operations
-    - skimage: For screen resizing
+    - cv2 (opencv): For screen grayscale conversion and resizing
     - kantorl.memory: For reading game state from memory
     - kantorl.rewards: For reward calculation
     - kantorl.global_map: For coordinate conversion
@@ -54,18 +54,17 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+import cv2
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from pyboy import PyBoy
 from pyboy.utils import WindowEvent
-from skimage.transform import resize
 
 from kantorl import memory
 from kantorl.config import KantoConfig
 from kantorl.global_map import GLOBAL_MAP_HEIGHT, GLOBAL_MAP_WIDTH, local_to_global
-from kantorl.rewards import DefaultReward, GameState, RewardFunction, create_reward
-
+from kantorl.rewards import GameState, RewardFunction, create_reward
 
 # =============================================================================
 # ACTION MAPPING CONSTANTS
@@ -270,6 +269,23 @@ class KantoRedEnv(gym.Env):
         self._explore_scale = (GLOBAL_MAP_WIDTH // 48, GLOBAL_MAP_HEIGHT // 48)
 
         # =================================================================
+        # Event Flag Deduplication
+        # =================================================================
+
+        # Cached event count from _get_observation() — reused by reward and info
+        # to avoid redundant 312-byte memory reads per step
+        self._last_event_count: int = 0
+
+        # =================================================================
+        # Fourier Encoding Cache
+        # =================================================================
+
+        # Cache for _fourier_encode_levels() — levels change ~once per 1000 steps
+        # Stores (key, result) where key is tuple(levels)
+        self._level_cache_key: tuple[int, ...] = ()
+        self._level_cache_val: np.ndarray = np.zeros(8, dtype=np.float32)
+
+        # =================================================================
         # Frame Stacking
         # =================================================================
 
@@ -410,9 +426,11 @@ class KantoRedEnv(gym.Env):
             window = "null" if self.render_mode != "human" else "SDL2"
 
             # Create the emulator with the ROM
+            # sound=False skips audio emulation — wasted CPU in headless training
             self._pyboy = PyBoy(
                 self.config.rom_path,
                 window=window,
+                sound=False,
             )
 
             # =============================================================
@@ -540,6 +558,9 @@ class KantoRedEnv(gym.Env):
         # Clear frame stack
         self.frame_stack = np.zeros_like(self.frame_stack)
 
+        # Clear Fourier encoding cache
+        self._level_cache_key = ()
+
         # Reset reward function internal state
         self.reward_fn.reset()
 
@@ -598,23 +619,31 @@ class KantoRedEnv(gym.Env):
         self.recent_actions[-1] = action
 
         # =================================================================
-        # Calculate Reward
+        # Update Exploration Map
         # =================================================================
 
-        # Get current game state
-        current_state = GameState.from_pyboy(self.pyboy, self.step_count)
+        self._update_explore_map()
+
+        # =================================================================
+        # Build Observation (reads event flags once)
+        # =================================================================
+
+        obs = self._get_observation()
+
+        # =================================================================
+        # Calculate Reward (reuses event count from observation)
+        # =================================================================
+
+        # Pass pre-computed event count to avoid redundant 312-byte memory read
+        current_state = GameState.from_pyboy(
+            self.pyboy, self.step_count, event_count=self._last_event_count
+        )
 
         # Calculate reward from state change
         reward = self.reward_fn.calculate(current_state, self.prev_state)
 
         # Store state for next step's delta
         self.prev_state = current_state
-
-        # =================================================================
-        # Update Exploration Map
-        # =================================================================
-
-        self._update_explore_map()
 
         # =================================================================
         # Check Episode Termination
@@ -628,10 +657,9 @@ class KantoRedEnv(gym.Env):
         truncated = self.step_count >= self.config.max_steps
 
         # =================================================================
-        # Build Observation and Info
+        # Build Info (reuses event count from observation)
         # =================================================================
 
-        obs = self._get_observation()
         info = self._get_info()
 
         return obs, reward, terminated, truncated, info
@@ -690,14 +718,15 @@ class KantoRedEnv(gym.Env):
             - recent_actions: Action history
         """
         # =================================================================
-        # Update Frame Stack
+        # Update Frame Stack (in-place shift avoids allocation)
         # =================================================================
 
         # Get current screen as grayscale
         screen = self._get_screen_gray()
 
-        # Roll frame stack (oldest frame falls off)
-        self.frame_stack = np.roll(self.frame_stack, -1, axis=0)
+        # Shift frames in-place: move frames 1,2 to positions 0,1
+        # This avoids np.roll() which allocates a new array every step
+        self.frame_stack[:-1] = self.frame_stack[1:]
 
         # Add new frame at the end
         self.frame_stack[-1] = screen
@@ -728,20 +757,25 @@ class KantoRedEnv(gym.Env):
         badges = memory.get_badge_flags(self.pyboy)
 
         # Event flags (2560 binary values)
+        # Cache the count for reuse by reward calculation and _get_info(),
+        # avoiding a redundant 312-byte memory read
         events = memory.get_event_flags(self.pyboy)
+        self._last_event_count = int(np.sum(events))
 
         # =================================================================
         # Build and Return Observation Dict
         # =================================================================
 
+        # No .copy() needed: SubprocVecEnv pickles observations for IPC
+        # (inherent copy), and originals are overwritten on the next step
         return {
-            "screens": self.frame_stack.copy(),
+            "screens": self.frame_stack,
             "health": health,
             "level": level_encoded,
             "badges": badges,
             "events": events,
-            "map": self.explore_map.copy(),
-            "recent_actions": self.recent_actions.copy(),
+            "map": self.explore_map,
+            "recent_actions": self.recent_actions,
         }
 
     def _get_screen_gray(self) -> np.ndarray:
@@ -757,21 +791,19 @@ class KantoRedEnv(gym.Env):
         Notes:
             - Original GameBoy resolution: 144x160 (height x width)
             - Default target: 72x80 (4x reduction)
-            - Uses anti-aliasing for smoother downscaling
+            - Uses OpenCV INTER_AREA for fast, anti-aliased downscaling
+            - PyBoy screen is RGBA (4 channels); we slice to RGB before converting
         """
-        # Get RGB screen from PyBoy (shape: 144, 160, 3)
-        screen = self.pyboy.screen.ndarray
+        # Get RGBA screen from PyBoy (shape: 144, 160, 4) and slice to RGB
+        screen = self.pyboy.screen.ndarray[:, :, :3]
 
-        # Convert to grayscale by averaging color channels
-        # Using float32 for accurate averaging before resize
-        gray = np.mean(screen, axis=2).astype(np.float32)
+        # Convert RGB to grayscale in C (no Python-level type juggling)
+        gray = cv2.cvtColor(screen, cv2.COLOR_RGB2GRAY)
 
-        # Resize to target dimensions
+        # Resize to target dimensions using INTER_AREA (optimal for downscaling)
+        # cv2.resize takes (width, height) — opposite of numpy's (height, width)
         h, w = self.config.screen_size
-        resized = resize(gray, (h, w), anti_aliasing=True, preserve_range=True)
-
-        # Convert back to uint8 for storage efficiency
-        return resized.astype(np.uint8)
+        return cv2.resize(gray, (w, h), interpolation=cv2.INTER_AREA)
 
     def _fourier_encode_levels(self, levels: list[int], dim: int = 8) -> np.ndarray:
         """
@@ -780,6 +812,9 @@ class KantoRedEnv(gym.Env):
         Instead of passing raw level values, we encode them using sine and
         cosine functions at multiple frequencies. This creates a smoother
         representation that helps the neural network generalize better.
+
+        Results are cached because levels change ~once per 1000+ steps (only
+        on level-up), avoiding redundant trig computation on every step.
 
         Args:
             levels: List of party Pokemon levels (1-100 each).
@@ -798,6 +833,11 @@ class KantoRedEnv(gym.Env):
         if not levels:
             return np.zeros(dim, dtype=np.float32)
 
+        # Check cache — levels rarely change so this hits ~99.9% of steps
+        key = tuple(levels)
+        if key == self._level_cache_key:
+            return self._level_cache_val
+
         # Normalize average level to [0, 1]
         # Max level is 100, so divide by 100
         avg_level = np.mean(levels) / 100.0
@@ -811,9 +851,13 @@ class KantoRedEnv(gym.Env):
         cos_features = np.cos(2 * np.pi * freqs * avg_level)
 
         # Concatenate for final feature vector
-        features = np.concatenate([sin_features, cos_features])
+        features = np.concatenate([sin_features, cos_features]).astype(np.float32)
 
-        return features.astype(np.float32)
+        # Update cache
+        self._level_cache_key = key
+        self._level_cache_val = features
+
+        return features
 
     def _update_explore_map(self) -> None:
         """
@@ -874,7 +918,7 @@ class KantoRedEnv(gym.Env):
             "map_id": map_id,
             "position": (x, y),
             "badges": memory.get_badges(self.pyboy),
-            "events": memory.count_event_flags(self.pyboy),
+            "events": self._last_event_count,
             "party_count": memory.get_party_count(self.pyboy),
             "in_battle": memory.is_in_battle(self.pyboy),
             "explore_tiles": int(np.sum(self.explore_map > 0)),

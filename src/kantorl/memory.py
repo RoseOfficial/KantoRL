@@ -745,20 +745,20 @@ def get_event_flags(pyboy: "PyBoy") -> np.ndarray:
         - Padding to 2560 (multiple of 256) for observation space alignment
         - Used directly in the observation space for the agent
         - Many flags are permanently set, some reset on map change
+        - Uses vectorized np.unpackbits for ~10x speedup vs pure Python loop
     """
-    # Pre-allocate array for all flags
-    flags = np.zeros(EVENT_FLAGS_SIZE * 8, dtype=np.int8)
+    # Read all 312 flag bytes in one slice (avoids 312 individual read_byte calls)
+    # pyboy.memory[...] returns a list of ints, so we use np.array (not frombuffer)
+    raw = np.array(
+        pyboy.memory[ADDR_EVENT_FLAGS : ADDR_EVENT_FLAGS + EVENT_FLAGS_SIZE],
+        dtype=np.uint8,
+    )
 
-    # Extract each bit from each byte
-    for i in range(EVENT_FLAGS_SIZE):
-        byte = read_byte(pyboy, ADDR_EVENT_FLAGS + i)
-        # Unpack 8 bits from this byte into the array
-        for bit in range(8):
-            # (byte >> bit) & 1 extracts bit number 'bit'
-            flags[i * 8 + bit] = (byte >> bit) & 1
+    # Unpack all bits at once: bitorder='little' matches the original (byte >> bit) & 1
+    # extraction order where bit 0 is the LSB
+    flags = np.unpackbits(raw, bitorder="little").astype(np.int8)
 
-    # Pad to 2560 for consistent observation space size
-    # np.pad adds zeros to the end to reach target length
+    # Pad from 2496 to 2560 for consistent observation space size
     return np.pad(flags, (0, 2560 - len(flags)))
 
 
@@ -781,16 +781,17 @@ def count_event_flags(pyboy: "PyBoy") -> int:
         Progress: 142 events completed
 
     Notes:
-        - More efficient than get_event_flags() when only count is needed
+        - Uses vectorized np.unpackbits for efficient bit counting
         - Used in reward calculation to detect new events
         - Typical endgame value is ~1000+ flags
     """
-    count = 0
-    for i in range(EVENT_FLAGS_SIZE):
-        byte = read_byte(pyboy, ADDR_EVENT_FLAGS + i)
-        # Count 1 bits in this byte using bin().count("1")
-        count += bin(byte).count("1")
-    return count
+    # Read all 312 flag bytes in one slice and count set bits via unpackbits
+    # pyboy.memory[...] returns a list of ints, so we use np.array (not frombuffer)
+    raw = np.array(
+        pyboy.memory[ADDR_EVENT_FLAGS : ADDR_EVENT_FLAGS + EVENT_FLAGS_SIZE],
+        dtype=np.uint8,
+    )
+    return int(np.sum(np.unpackbits(raw)))
 
 
 # =============================================================================
