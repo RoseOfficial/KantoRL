@@ -310,6 +310,7 @@ class CurriculumWrapper(gym.Wrapper):
         env: gym.Env,
         pool_dir: Path,
         config: KantoConfig | None = None,
+        initial_step_offset: int = 0,
     ) -> None:
         """
         Initialize the curriculum wrapper.
@@ -318,6 +319,9 @@ class CurriculumWrapper(gym.Wrapper):
             env: The base KantoRedEnv to wrap.
             pool_dir: Directory for the checkpoint pool.
             config: KantoConfig with curriculum settings. If None, uses defaults.
+            initial_step_offset: Step counter offset for the first episode, used
+                to stagger episode truncation across parallel environments so they
+                don't all reset at the same global step.
         """
         super().__init__(env)
 
@@ -335,6 +339,11 @@ class CurriculumWrapper(gym.Wrapper):
         self._best_badges = 0
         self._best_events = 0
         self._step_count = 0
+
+        # Stagger offset: pre-advances step counter on first episode only
+        # so parallel envs truncate at different times
+        self._initial_step_offset = initial_step_offset
+        self._first_episode = True
 
         # Logging counters (persist across episodes)
         self._checkpoint_resets = 0
@@ -374,8 +383,15 @@ class CurriculumWrapper(gym.Wrapper):
         # Always call base reset first (initializes emulator, clears tracking)
         obs, info = self.env.reset(seed=seed, options=options)
 
-        # Reset episode tracking
-        self._step_count = 0
+        # Apply stagger offset on first episode to prevent synchronized truncation
+        # across all parallel envs. After the first episode, envs are naturally
+        # desynchronized so no offset is needed.
+        if self._first_episode and self._initial_step_offset > 0:
+            self._step_count = self._initial_step_offset
+            self._first_episode = False
+        else:
+            self._step_count = 0
+
         self._best_badges = 0
         self._best_events = 0
         self._total_resets += 1

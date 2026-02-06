@@ -88,7 +88,7 @@ from typing import TYPE_CHECKING
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 
 from kantorl.callbacks import (
     CumulativeCheckpointCallback,
@@ -180,17 +180,24 @@ def create_lstm_policy_kwargs() -> dict:
     - Maintaining context across the longer episodes in curriculum mode
 
     Network Architecture:
-        - Policy LSTM: 256 hidden units, 1 layer
-        - Critic LSTM: 256 hidden units, 1 layer (separate from policy)
-        - Policy MLP: LSTM output → 256 → Actions
-        - Critic MLP: LSTM output → 256 → Value
+        - Shared LSTM: 256 hidden units, 1 layer (feeds both policy and critic)
+        - Critic LSTM: 256 hidden units, 1 layer (additional critic-only processing)
+        - Policy MLP: Shared LSTM output → 256 → Actions
+        - Critic MLP: Shared LSTM + Critic LSTM output → 256 → Value
 
-    Why Separate LSTMs?
-        shared_lstm=False gives policy and critic independent memories.
-        This prevents value function gradient updates from corrupting the
-        policy's temporal representations, which is especially important
-        in Pokemon Red where the value landscape is very different from
-        the policy landscape.
+    Why Shared LSTM?
+        shared_lstm=True lets value function gradients shape the shared LSTM's
+        temporal representations. With separate LSTMs, the critic learns a
+        near-perfect value function (explained_variance=0.99) but the policy
+        LSTM gets zero gradient signal from the critic — its temporal features
+        are trained only by the near-zero policy gradient, causing vanishing
+        gradients (clip_fraction=0, approx_kl≈3e-5). Sharing the LSTM gives
+        the policy useful features shaped by value learning.
+
+        sb3-contrib requires shared_lstm and enable_critic_lstm to be mutually
+        exclusive. With shared_lstm=True, both heads use the same LSTM output
+        and their separate MLP heads (pi: [256], vf: [256]) provide
+        head-specific processing.
 
     Returns:
         Dictionary with LSTM and network architecture configuration.
@@ -198,18 +205,22 @@ def create_lstm_policy_kwargs() -> dict:
     Example:
         >>> kwargs = create_lstm_policy_kwargs()
         >>> model = RecurrentPPO("MultiInputLstmPolicy", env, policy_kwargs=kwargs)
+
+    Notes:
+        BREAKING: Changing shared_lstm invalidates existing RecurrentPPO
+        checkpoints. Must use --no-resume and delete old checkpoints.
     """
     return {
         # LSTM configuration
         "lstm_hidden_size": 256,     # Hidden state size for temporal memory
         "n_lstm_layers": 1,          # Single LSTM layer (sufficient, faster)
-        "shared_lstm": False,        # Separate LSTMs for policy and critic
-        "enable_critic_lstm": True,  # Critic gets its own LSTM
+        "shared_lstm": True,         # Share LSTM so value gradients shape policy features
+        "enable_critic_lstm": False,  # Mutually exclusive with shared_lstm in sb3-contrib
 
-        # MLP layers after LSTM output
+        # MLP layers after shared LSTM output
         "net_arch": {
-            "pi": [256],  # Policy: LSTM → 256 → Actions
-            "vf": [256],  # Value: LSTM → 256 → Value
+            "pi": [256],  # Policy: Shared LSTM → 256 → Actions
+            "vf": [256],  # Value: Shared LSTM → 256 → Value
         },
         "activation_fn": torch.nn.ReLU,
     }
@@ -237,6 +248,7 @@ def train(
     wandb_project: str = "kantorl",
     wandb_entity: str | None = None,
     wandb_group: str | None = None,
+    use_agent: bool = False,
 ) -> None:
     """
     Run PPO training on Pokemon Red.
@@ -288,6 +300,9 @@ def train(
         wandb_project: wandb project name for grouping runs. Default "kantorl".
         wandb_entity: wandb entity (team/username). None uses personal default.
         wandb_group: Optional run group for organizing related experiments.
+        use_agent: Enable modular agent system with quest planning, navigation
+                  reward shaping, rule-based battle control, and dialogue handling.
+                  Requires: --no-resume for first run (observation space changes).
 
     Side Effects:
         - Creates session_path directory if it doesn't exist
@@ -334,6 +349,7 @@ def train(
         stream_color=stream_color,
         stream_sprite_id=stream_sprite_id,
         enable_curriculum=use_curriculum,
+        enable_agent=use_agent,
         enable_wandb=enable_wandb,
         wandb_project=wandb_project,
         wandb_entity=wandb_entity,
@@ -371,6 +387,9 @@ def train(
     # Create a list of environment factory functions
     # Each function, when called, creates one environment instance
     # All environments stream if streaming is enabled (each with unique color/name)
+    # Stagger offsets prevent synchronized episode truncation across all envs
+    stagger_step = config.max_steps // n_envs
+
     env_fns = [
         make_env(
             rom_path,
@@ -380,6 +399,8 @@ def train(
             reward_fn=reward_fn,
             enable_streaming=enable_streaming,  # All environments stream
             enable_curriculum=use_curriculum,   # Curriculum wrapping
+            enable_agent=use_agent,             # Modular agent system
+            initial_step_offset=i * stagger_step,  # Stagger first truncation
         )
         for i in range(n_envs)
     ]
@@ -387,7 +408,7 @@ def train(
     # Create the vectorized environment
     # SubprocVecEnv spawns n_envs processes, each running one environment
     # This provides linear speedup for training (16 envs ≈ 16x faster)
-    env = SubprocVecEnv(env_fns)
+    raw_env = SubprocVecEnv(env_fns)
 
     # -------------------------------------------------------------------------
     # Checkpoint Detection
@@ -397,6 +418,36 @@ def train(
     checkpoint_path, start_steps = CumulativeCheckpointCallback.find_latest(
         session_path / "checkpoints"
     )
+
+    # -------------------------------------------------------------------------
+    # Reward & Observation Normalization (VecNormalize)
+    # -------------------------------------------------------------------------
+    # VecNormalize maintains running mean/variance of observations and rewards,
+    # normalizing them to roughly unit Gaussian. This is critical because:
+    # - Raw exploration rewards are ~0.005/step, producing near-zero advantages
+    # - Without normalization, the value function predicts these perfectly,
+    #   making policy gradients vanish (clip_fraction=0, approx_kl≈1e-7)
+    # - VecNormalize rescales rewards to unit variance, giving PPO meaningful
+    #   gradient signal regardless of the raw reward magnitude
+    vecnorm_path = session_path / "checkpoints" / "vecnormalize.pkl"
+
+    if checkpoint_path and resume and vecnorm_path.exists():
+        # Restore normalization statistics from a previous training session
+        # training=True keeps updating the running stats during training
+        env = VecNormalize.load(str(vecnorm_path), raw_env)
+        env.training = True
+    else:
+        # Fresh normalization — stats will converge within the first few updates
+        # norm_obs=False because our Dict obs contains MultiBinary spaces
+        # (badges, events) which VecNormalize can't normalize. The continuous
+        # obs (screens, health, level) are already bounded, so reward
+        # normalization alone is the critical fix for vanishing gradients.
+        env = VecNormalize(
+            raw_env,
+            norm_obs=False,      # Dict obs has MultiBinary — skip obs norm
+            norm_reward=True,    # Normalize rewards to unit variance
+            clip_reward=10.0,    # Clip normalized rewards to [-10, 10]
+        )
 
     # -------------------------------------------------------------------------
     # Model Creation or Loading
@@ -432,13 +483,22 @@ def train(
             # LSTM provides temporal memory across longer episodes
             from sb3_contrib import RecurrentPPO
 
+            # RecurrentPPO needs shorter rollouts for effective LSTM BPTT.
+            # 128 steps causes gradient vanishing through the LSTM
+            # (0.9^128 ≈ 1e-6); 32 is within effective LSTM memory range
+            # (0.9^32 ≈ 0.035). Rollouts happen 4× more often to compensate.
+            # Math: 8 envs × 32 steps = 256 samples/rollout,
+            # 256/128 = 2 minibatches, 2 × 3 epochs = 6 gradient steps.
+            recurrent_n_steps = 32
+            recurrent_batch_size = 128
+
             model = RecurrentPPO(
                 # MultiInputLstmPolicy: Dict obs + LSTM layers
                 "MultiInputLstmPolicy",
                 env,
-                # Rollout parameters
-                n_steps=config.n_steps,
-                batch_size=config.batch_size,
+                # Rollout parameters — shorter for LSTM gradient flow
+                n_steps=recurrent_n_steps,
+                batch_size=recurrent_batch_size,
                 n_epochs=config.n_epochs,
                 # Discount and advantage estimation
                 gamma=config.gamma,
@@ -450,10 +510,8 @@ def train(
                 vf_coef=config.vf_coef,
                 # Optimizer
                 learning_rate=config.learning_rate,
-                # LSTM network architecture
+                # LSTM network architecture (shared LSTM)
                 policy_kwargs=create_lstm_policy_kwargs(),
-                # Logging
-                tensorboard_log=str(session_path / "tensorboard"),
                 verbose=1,
                 seed=seed,
             )
@@ -484,8 +542,6 @@ def train(
                 learning_rate=config.learning_rate,  # Learning rate (2.5e-4)
                 # Network architecture (defined above)
                 policy_kwargs=create_policy_kwargs(),
-                # Logging
-                tensorboard_log=str(session_path / "tensorboard"),
                 verbose=1,  # Print training info
                 # Reproducibility
                 seed=seed,
@@ -504,10 +560,11 @@ def train(
         CumulativeCheckpointCallback(
             save_path=session_path / "checkpoints",
             save_freq=100_000,  # Save every 100K steps
+            vec_normalize=env,  # Save normalization stats with each checkpoint
         ),
         # Log game-specific metrics to TensorBoard
         # Tracks badges, events, exploration progress
-        TensorboardCallback(log_freq=1000),
+        TensorboardCallback(log_freq=1000, session_path=session_path),
         # Warn if training appears stalled
         # Detects when reward stops improving
         StallDetectionCallback(check_freq=50_000),
@@ -526,7 +583,6 @@ def train(
     # Training Loop
     # -------------------------------------------------------------------------
     print(f"Training for {remaining_steps:,} steps...")
-    print(f"Tensorboard: tensorboard --logdir {session_path / 'tensorboard'}")
 
     try:
         # Run the main training loop
@@ -550,6 +606,7 @@ def train(
         # This prevents losing progress from the last save interval
         final_path = session_path / "checkpoints" / f"model_{model.num_timesteps}.zip"
         model.save(final_path)
+        env.save(str(vecnorm_path))
         print(f"Saved final model: {final_path}")
 
         # Upload final model as wandb Artifact for easy access/download
@@ -660,6 +717,11 @@ def main() -> None:
         help="Enable curriculum learning with auto-checkpointing, HM automation, and LSTM",
     )
     parser.add_argument(
+        "--agent",
+        action="store_true",
+        help="Enable modular agent (quest planner, navigator, battler)",
+    )
+    parser.add_argument(
         "--stream",
         action="store_true",
         help="Enable streaming to shared map visualization server",
@@ -722,6 +784,7 @@ def main() -> None:
         stream_color=args.stream_color,
         stream_sprite_id=args.stream_sprite,
         use_curriculum=args.curriculum,
+        use_agent=args.agent,
         enable_wandb=args.wandb,
         wandb_project=args.wandb_project,
         wandb_entity=args.wandb_entity,

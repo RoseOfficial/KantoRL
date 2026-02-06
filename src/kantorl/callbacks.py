@@ -47,6 +47,8 @@ import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
 if TYPE_CHECKING:
+    from stable_baselines3.common.vec_env import VecNormalize
+
     import wandb as wandb_mod
 
 
@@ -97,6 +99,7 @@ class CumulativeCheckpointCallback(BaseCallback):
         save_freq: int = 100_000,
         name_prefix: str = "model",
         verbose: int = 1,
+        vec_normalize: VecNormalize | None = None,
     ):
         """
         Initialize the checkpoint callback.
@@ -108,6 +111,10 @@ class CumulativeCheckpointCallback(BaseCallback):
             name_prefix: Prefix for checkpoint filenames. Default "model" produces
                         files like "model_100000.zip".
             verbose: Verbosity level. 0=silent, 1=print when checkpoints are saved.
+            vec_normalize: Optional VecNormalize wrapper whose running statistics
+                          (obs mean/var, reward mean/var) are saved alongside each
+                          model checkpoint. Required for correct reward scaling on
+                          resume.
         """
         super().__init__(verbose)
 
@@ -115,6 +122,7 @@ class CumulativeCheckpointCallback(BaseCallback):
         self.save_path = Path(save_path)
         self.save_freq = save_freq
         self.name_prefix = name_prefix
+        self.vec_normalize = vec_normalize
 
         # Create the checkpoint directory if it doesn't exist
         # parents=True creates intermediate directories, exist_ok=True ignores if exists
@@ -140,6 +148,12 @@ class CumulativeCheckpointCallback(BaseCallback):
 
             # Save the model (includes policy network, optimizer state, etc.)
             self.model.save(path)
+
+            # Save VecNormalize running statistics alongside the model
+            # These are needed to restore reward/obs normalization on resume
+            if self.vec_normalize is not None:
+                vecnorm_path = self.save_path / "vecnormalize.pkl"
+                self.vec_normalize.save(str(vecnorm_path))
 
             # Print save message if verbose
             if self.verbose:
@@ -241,17 +255,25 @@ class TensorboardCallback(BaseCallback):
         - Metrics appear under the "game/" prefix in TensorBoard
     """
 
-    def __init__(self, log_freq: int = 1000, verbose: int = 0):
+    def __init__(
+        self,
+        log_freq: int = 1000,
+        session_path: Path | None = None,
+        verbose: int = 0,
+    ):
         """
         Initialize the TensorBoard callback.
 
         Args:
             log_freq: Log aggregated metrics every N training steps.
                      1000 steps provides good granularity without too much data.
+            session_path: Directory for session outputs (event checklist file).
+                         If None, checklist file is not written.
             verbose: Verbosity level (currently unused, for API consistency).
         """
         super().__init__(verbose)
         self.log_freq = log_freq
+        self.session_path = session_path
 
         # Buffers to collect metrics from all environments between logging
         # These accumulate values and are cleared after each log
@@ -260,6 +282,12 @@ class TensorboardCallback(BaseCallback):
         self.badges_collected: list[int] = []  # Badge counts from info dicts
         self.events_triggered: list[int] = []  # Event flag counts from info dicts
         self.unique_coords: list[int] = []  # Exploration tile counts from info dicts
+
+        # Full event tracking — persists entire training session
+        # Union of all event flag bit indices seen across all envs, all time
+        self._all_events_seen: set[int] = set()
+        # Maps bit indices to human-readable names (loaded lazily on first step)
+        self._milestone_map: dict[int, str] = {}
 
         # Curriculum learning metric buffers
         # Only populated when curriculum mode is active
@@ -280,6 +308,12 @@ class TensorboardCallback(BaseCallback):
         Returns:
             True to continue training (never stops training).
         """
+        # Load milestone name map once (lazy — avoids import at module level)
+        if not self._milestone_map:
+            from kantorl.env import _load_milestones
+
+            self._milestone_map = _load_milestones()
+
         # Collect info from all environments in the vectorized setup
         # self.locals contains variables from the training loop, including "infos"
         for info in self.locals.get("infos", []):
@@ -291,6 +325,13 @@ class TensorboardCallback(BaseCallback):
                 self.events_triggered.append(info["events"])
             if "unique_coords" in info:
                 self.unique_coords.append(info["unique_coords"])
+
+            # Collect newly set event flags and announce first-time events
+            for idx in info.get("new_event_indices", []):
+                if idx not in self._all_events_seen:
+                    self._all_events_seen.add(idx)
+                    name = self._milestone_map.get(idx, f"Event #{idx}")
+                    print(f"  EVENT: {name}")
 
             # Collect curriculum metrics (only present when curriculum is active)
             if "curriculum_pool_size" in info:
@@ -314,6 +355,9 @@ class TensorboardCallback(BaseCallback):
             # Log event and exploration statistics
             self.logger.record("game/events_mean", np.mean(self.events_triggered))
             self.logger.record("game/explore_tiles_mean", np.mean(self.unique_coords))
+
+            # Log total unique events ever seen across all envs (session-wide)
+            self.logger.record("game/events_achieved", len(self._all_events_seen))
 
             # Log curriculum metrics (only if curriculum data was collected)
             if self.curriculum_pool_sizes:
@@ -340,6 +384,10 @@ class TensorboardCallback(BaseCallback):
                     np.mean(self.curriculum_dynamic_max_steps),
                 )
 
+            # Write event checklist file (JSON snapshot of all events seen)
+            if self.session_path is not None:
+                self._write_event_checklist()
+
             # Clear buffers to track recent performance only
             # This prevents old data from affecting current statistics
             self.badges_collected.clear()
@@ -352,6 +400,51 @@ class TensorboardCallback(BaseCallback):
             self.curriculum_dynamic_max_steps.clear()
 
         return True
+
+    def _write_event_checklist(self) -> None:
+        """
+        Write full event flag checklist to a JSON file in the session directory.
+
+        Produces a snapshot of all 2560 event flags: which named events exist,
+        which have been achieved, and which unnamed bit indices were triggered.
+        This file is overwritten each log interval so it always reflects the
+        latest state.
+
+        The output file is ``session_path/event_checklist.json``.
+        """
+        import json
+
+        assert self.session_path is not None  # guarded by caller
+        checklist_path = self.session_path / "event_checklist.json"
+
+        # Named events section — one entry per curated milestone from events.json
+        named_events: dict[str, dict[str, object]] = {}
+        for idx in sorted(self._milestone_map):
+            name = self._milestone_map[idx]
+            named_events[str(idx)] = {
+                "name": name,
+                "achieved": idx in self._all_events_seen,
+            }
+
+        # Unnamed achieved — bit indices that fired but aren't in events.json
+        unnamed_achieved = sorted(
+            idx for idx in self._all_events_seen if idx not in self._milestone_map
+        )
+
+        checklist: dict[str, object] = {
+            "step": self.num_timesteps,
+            "total_achieved": len(self._all_events_seen),
+            "total_flags": 2560,
+            "named_achieved": sum(
+                1 for idx in self._milestone_map if idx in self._all_events_seen
+            ),
+            "named_total": len(self._milestone_map),
+            "named_events": named_events,
+            "unnamed_achieved": unnamed_achieved,
+        }
+
+        with open(checklist_path, "w") as f:
+            json.dump(checklist, f, indent=2)
 
 
 # =============================================================================
@@ -618,6 +711,10 @@ class WandbCallback(BaseCallback):
         self.curriculum_pool_sizes: list[int] = []
         self.curriculum_best_progress: list[int] = []
 
+        # Full event tracking — persists entire training session
+        self._all_events_seen: set[int] = set()
+        self._milestone_map: dict[int, str] = {}
+
     def _on_step(self) -> bool:
         """
         Called after each training step. Collects metrics and logs to wandb.
@@ -630,6 +727,12 @@ class WandbCallback(BaseCallback):
         Returns:
             True to continue training (never stops training).
         """
+        # Load milestone name map once (lazy — avoids import at module level)
+        if not self._milestone_map:
+            from kantorl.env import _load_milestones
+
+            self._milestone_map = _load_milestones()
+
         # -----------------------------------------------------------------
         # Phase 1: Collect metrics from every env (runs every step)
         # -----------------------------------------------------------------
@@ -642,6 +745,9 @@ class WandbCallback(BaseCallback):
                 self.events_buffer.append(info["events"])
             if "unique_coords" in info:
                 self.coords_buffer.append(info["unique_coords"])
+            # Collect newly set event flags (no console announcement — wandb only)
+            for idx in info.get("new_event_indices", []):
+                self._all_events_seen.add(idx)
             # Curriculum metrics (only present when curriculum mode is active)
             if "curriculum_pool_size" in info:
                 self.curriculum_pool_sizes.append(info["curriculum_pool_size"])
@@ -665,6 +771,7 @@ class WandbCallback(BaseCallback):
             "game/explore_tiles_mean": float(np.mean(self.coords_buffer))
             if self.coords_buffer
             else 0.0,
+            "game/events_achieved": len(self._all_events_seen),
         }
 
         # PPO losses — only populated after an optimizer update, not every step.
@@ -696,6 +803,7 @@ class WandbCallback(BaseCallback):
         self.wandb_run.log(metrics, step=self.num_timesteps)
 
         # Reset buffers and timer for next interval
+        # Note: _all_events_seen is NOT cleared — it persists for the session
         self.last_log_time = now
         self.badges_buffer.clear()
         self.events_buffer.clear()
@@ -723,6 +831,7 @@ class WandbCallback(BaseCallback):
                 "game/explore_tiles_mean": float(np.mean(self.coords_buffer))
                 if self.coords_buffer
                 else 0.0,
+                "game/events_achieved": len(self._all_events_seen),
             }
             if self.curriculum_pool_sizes:
                 metrics["curriculum/pool_size"] = max(self.curriculum_pool_sizes)

@@ -171,8 +171,9 @@ class KantoConfig:
 
     # Weight for the exploration bonus component of the reward
     # Higher values encourage visiting new map coordinates
-    # 0.1 provides gentle exploration pressure without dominating other rewards
-    explore_weight: float = 0.1
+    # 0.3 provides a strong dense signal to bootstrap early learning before
+    # sparse event/badge rewards kick in
+    explore_weight: float = 0.3
 
     # =============================================================================
     # TRAINING HYPERPARAMETERS (PPO)
@@ -200,9 +201,11 @@ class KantoConfig:
     learning_rate: float = 3e-4
 
     # Discount factor (gamma) for future rewards
-    # 0.997 means rewards far in the future are still somewhat valuable
-    # Higher than Atari (0.99) because Pokemon has longer-term goals
-    gamma: float = 0.997
+    # 0.995 gives an effective horizon of ~200 steps (~80 seconds game time).
+    # This is long enough for multi-room navigation but short enough to produce
+    # meaningful TD errors with sparse rewards. At 0.997 (horizon ~333), V(t) ≈ V(t+1)
+    # and advantages collapse to near-zero, starving the policy of gradient signal.
+    gamma: float = 0.995
 
     # GAE (Generalized Advantage Estimation) lambda parameter
     # Balances bias (low lambda) vs variance (high lambda) in advantage estimates
@@ -211,9 +214,9 @@ class KantoConfig:
 
     # PPO clipping parameter
     # Limits the ratio of new/old policy probabilities
-    # 0.1 is slightly more conservative than the default 0.2
-    # Smaller values = more stable but slower learning
-    clip_range: float = 0.1
+    # 0.2 is the standard PPO default — allows sufficient policy updates
+    # to break out of uniform-random initialization
+    clip_range: float = 0.2
 
     # Entropy coefficient for the loss function
     # Adds bonus for high-entropy (random) action distributions
@@ -256,9 +259,9 @@ class KantoConfig:
 
     # Number of steps between coordinate uploads.
     # The transdimensional.xyz visualizer animates each batch of coordinates
-    # over an adaptive time window. Larger batches = smoother animation.
-    # 500 matches pokemonred_puffer's proven value. At ~80 sps/env, each
-    # batch contains ~500 coordinates and is sent every ~6 seconds.
+    # over an adaptive time window. Lower values = more frequent smaller
+    # batches = tighter animation loop with less visible gaps at boundaries.
+    # At ~80 sps/env, 200 steps ≈ one batch every ~2.5 seconds.
     # The synchronous send (~10ms) has negligible impact on training FPS.
     stream_interval: int = 500
 
@@ -290,9 +293,10 @@ class KantoConfig:
     max_pool_size: int = 50
 
     # Minimum event flag increase to trigger a milestone checkpoint save
-    # 50 events ≈ defeating a few trainers or completing a route
-    # Lower values save more frequently, higher values save only major milestones
-    milestone_event_delta: int = 50
+    # 5 events is low enough to populate the curriculum pool early, even with
+    # minor progress (picking up items, talking to NPCs)
+    # Higher values save only major milestones but delay curriculum activation
+    milestone_event_delta: int = 5
 
     # Scale max episode length with badge progress
     # At 0 badges: max_steps (163,840)
@@ -322,6 +326,40 @@ class KantoConfig:
     # Optional run grouping for organizing related experiments
     # e.g., "curriculum_sweep" or "lr_comparison"
     wandb_group: str | None = None
+
+    # =============================================================================
+    # AGENT MODULE SETTINGS
+    # Settings for the modular game-aware agent system that adds hand-authored
+    # game knowledge (type chart, quest order, menu navigation) alongside RL.
+    # When enabled, the agent wrapper provides: battle control, dialogue handling,
+    # navigation reward shaping, and goal-directed observation augmentation.
+    # =============================================================================
+
+    # Master switch for the modular agent system
+    # When True, enables: AgentWrapper, battle override, dialogue handling,
+    # navigation reward shaping, and observation augmentation.
+    # First run requires --no-resume (new observation space breaks old checkpoints).
+    enable_agent: bool = False
+
+    # Navigation reward shaping magnitude (potential-based, policy-preserving)
+    # Higher values provide stronger guidance toward quest goals.
+    # At 0.1, navigation bonus is ~0.01/step — comparable to exploration reward.
+    # Set to 0.0 to disable navigation reward shaping entirely.
+    agent_nav_reward_scale: float = 0.1
+
+    # Battle performance bonus magnitude (reserved for v2)
+    # Currently unused — battles are handled by rule-based battler.
+    agent_battle_reward_scale: float = 0.05
+
+    # Whether the battler takes control during battles (overrides RL actions)
+    # True: Rule-based battler handles all battle decisions (recommended)
+    # False: RL policy controls battle actions (battler only provides observations)
+    agent_battle_control: bool = False
+
+    # Whether the controller handles dialogue (presses A to advance text)
+    # True: Automatically advances through NPC text, signs, battle messages
+    # False: RL policy must learn to press A during dialogue
+    agent_dialogue_control: bool = False
 
     def __post_init__(self) -> None:
         """
@@ -385,6 +423,19 @@ class KantoConfig:
             raise ValueError(
                 f"milestone_event_delta must be >= 1, got {self.milestone_event_delta}. "
                 "Must require at least 1 new event for a milestone."
+            )
+
+        # Validate agent module settings
+        if self.agent_nav_reward_scale < 0:
+            raise ValueError(
+                f"agent_nav_reward_scale must be >= 0, got {self.agent_nav_reward_scale}. "
+                "Set to 0 to disable navigation reward shaping."
+            )
+
+        if self.agent_battle_reward_scale < 0:
+            raise ValueError(
+                f"agent_battle_reward_scale must be >= 0, "
+                f"got {self.agent_battle_reward_scale}."
             )
 
     @classmethod

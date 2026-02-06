@@ -1095,3 +1095,285 @@ def party_has_move(pyboy: "PyBoy", move_id: int) -> bool:
         if move_id in get_party_moves(pyboy, slot):
             return True
     return False
+
+
+# =============================================================================
+# MEMORY ADDRESS CONSTANTS - BATTLE DETAIL (AGENT MODULE)
+# =============================================================================
+# Extended battle addresses used by the modular agent system for tactical
+# decision-making. These provide detailed information about both the player's
+# active Pokemon and the enemy Pokemon during battles.
+
+# Player's Active Pokemon Species (in battle copy)
+# Address: 0xD014
+# Size: 1 byte (internal species ID, NOT Pokedex number)
+# Source: pokered disassembly (wBattleMonSpecies)
+ADDR_BATTLE_PLAYER_SPECIES = 0xD014
+
+# Player's Active Pokemon Status Condition (in battle)
+# Address: 0xD018
+# Size: 1 byte
+# Values: 0=none, bit 0-2=sleep turns, bit 3=poison, bit 4=burn,
+#         bit 5=freeze, bit 6=paralysis
+# Source: pokered disassembly (wBattleMonStatus)
+ADDR_BATTLE_PLAYER_STATUS = 0xD018
+
+# Player's Active Pokemon Type 1 (in battle)
+# Address: 0xD019
+# Size: 1 byte (type index: 0=Normal through 0x1A=Dragon)
+# Source: pokered disassembly (wBattleMonType1)
+# Note: Game uses non-contiguous type IDs, NOT 0-14 sequential
+ADDR_BATTLE_PLAYER_TYPE1 = 0xD019
+
+# Player's Active Pokemon Type 2 (in battle)
+# Address: 0xD01A
+# Size: 1 byte (same encoding as Type 1)
+# Source: pokered disassembly (wBattleMonType2)
+ADDR_BATTLE_PLAYER_TYPE2 = 0xD01A
+
+# Player's Active Pokemon Move IDs (in battle copy)
+# Address: 0xD01C
+# Size: 4 bytes (1 byte per move slot)
+# Source: pokered disassembly (wBattleMonMoves)
+ADDR_BATTLE_PLAYER_MOVES = 0xD01C
+
+# Player's Active Pokemon Level (in battle)
+# Address: 0xD022
+# Size: 1 byte (1-100)
+# Source: pokered disassembly (wBattleMonLevel)
+ADDR_BATTLE_PLAYER_LEVEL = 0xD022
+
+# Player's Active Pokemon PP Values (in battle copy)
+# Address: 0xD02D
+# Size: 4 bytes (1 byte per move, upper 2 bits = PP Ups)
+# Source: pokered disassembly (wBattleMonPP)
+# Note: Actual PP = value & 0x3F (mask off PP Up bits)
+ADDR_BATTLE_PLAYER_PP = 0xD02D
+
+# Enemy Pokemon Species
+# Address: 0xCFE5
+# Size: 1 byte (internal species ID)
+# Source: pokered disassembly (wEnemyMonSpecies2)
+ADDR_BATTLE_ENEMY_SPECIES = 0xCFE5
+
+# Enemy Pokemon Status Condition
+# Address: 0xCFE9
+# Size: 1 byte (same encoding as player status)
+# Source: pokered disassembly (wEnemyMonStatus)
+ADDR_BATTLE_ENEMY_STATUS = 0xCFE9
+
+# Enemy Pokemon Type 1
+# Address: 0xCFEA
+# Size: 1 byte
+# Source: pokered disassembly (wEnemyMonType1)
+ADDR_BATTLE_ENEMY_TYPE1 = 0xCFEA
+
+# Enemy Pokemon Type 2
+# Address: 0xCFEB
+# Size: 1 byte
+# Source: pokered disassembly (wEnemyMonType2)
+ADDR_BATTLE_ENEMY_TYPE2 = 0xCFEB
+
+# Enemy Pokemon Move IDs
+# Address: 0xCFED
+# Size: 4 bytes (1 byte per move slot)
+# Source: pokered disassembly (wEnemyMonMoves)
+ADDR_BATTLE_ENEMY_MOVES = 0xCFED
+
+# Enemy Pokemon Level
+# Address: 0xCFF3
+# Size: 1 byte (1-100)
+# Source: pokered disassembly (wEnemyMonLevel)
+ADDR_BATTLE_ENEMY_LEVEL = 0xCFF3
+
+# Player Stat Modifiers (in-battle stages)
+# Address: 0xCD1A
+# Size: 7 bytes: attack, defense, speed, special, accuracy, evasion, (unused)
+# Values: 1-13 where 7 = neutral (no modification)
+# Source: pokered disassembly (wPlayerMonStatMods)
+ADDR_PLAYER_STAT_MODS = 0xCD1A
+
+# Enemy Stat Modifiers (in-battle stages)
+# Address: 0xCD2E
+# Size: 7 bytes (same layout as player)
+# Source: pokered disassembly (wEnemyMonStatMods)
+ADDR_ENEMY_STAT_MODS = 0xCD2E
+
+# Player Facing Direction (sprite movement byte)
+# Address: 0xC109
+# Size: 1 byte
+# Values: 0x00=down, 0x04=up, 0x08=left, 0x0C=right
+# Source: pokered disassembly (wSpritePlayerStateData1FacingDirection)
+# Note: This is the sprite state byte, not a simple 0-3 enum
+ADDR_FACING_DIRECTION = 0xC109
+
+
+# =============================================================================
+# GAME TYPE ID CONVERSION TABLE
+# =============================================================================
+# Pokemon Red uses non-contiguous type IDs internally. This mapping converts
+# the game's internal type IDs to our sequential 0-14 index used in the
+# type effectiveness chart.
+#
+# Source: pokered disassembly (constants/type_constants.asm)
+GAME_TYPE_TO_INDEX: dict[int, int] = {
+    0x00: 0,   # NORMAL
+    0x14: 1,   # FIRE
+    0x15: 2,   # WATER
+    0x17: 3,   # ELECTRIC
+    0x16: 4,   # GRASS
+    0x19: 5,   # ICE
+    0x01: 6,   # FIGHTING
+    0x03: 7,   # POISON
+    0x04: 8,   # GROUND
+    0x02: 9,   # FLYING
+    0x18: 10,  # PSYCHIC
+    0x07: 11,  # BUG
+    0x05: 12,  # ROCK
+    0x08: 13,  # GHOST
+    0x1A: 14,  # DRAGON
+}
+
+
+# =============================================================================
+# GAME STATE READING FUNCTIONS - BATTLE DETAIL (AGENT MODULE)
+# =============================================================================
+# Extended battle-reading functions for the modular agent system.
+# These provide detailed battle information for tactical decision-making.
+
+
+def get_battle_player_pokemon(pyboy: "PyBoy") -> dict[str, int | list[int]]:
+    """
+    Get detailed info about the player's active Pokemon in battle.
+
+    Reads the battle copy of the player's Pokemon data, which includes
+    species, types, moves, PP, level, HP, and status.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+
+    Returns:
+        Dictionary with battle Pokemon data:
+        - species: Internal species ID (1-190)
+        - hp: Current HP (16-bit)
+        - max_hp: Maximum HP (16-bit)
+        - level: Pokemon level (1-100)
+        - type1: Game-internal type ID for primary type
+        - type2: Game-internal type ID for secondary type
+        - moves: List of 4 move IDs (0 = empty)
+        - pp: List of 4 PP values (masked to 6 bits)
+        - status: Status condition byte
+
+    Notes:
+        - Only valid during battles (check is_in_battle() first)
+        - PP values have upper 2 bits masked off (PP Up encoding)
+        - Types use game-internal IDs, convert with GAME_TYPE_TO_INDEX
+    """
+    return {
+        "species": read_byte(pyboy, ADDR_BATTLE_PLAYER_SPECIES),
+        "hp": read_word(pyboy, ADDR_PLAYER_HP),
+        "max_hp": read_word(pyboy, ADDR_PLAYER_MAX_HP),
+        "level": read_byte(pyboy, ADDR_BATTLE_PLAYER_LEVEL),
+        "type1": read_byte(pyboy, ADDR_BATTLE_PLAYER_TYPE1),
+        "type2": read_byte(pyboy, ADDR_BATTLE_PLAYER_TYPE2),
+        "moves": [read_byte(pyboy, ADDR_BATTLE_PLAYER_MOVES + i) for i in range(4)],
+        "pp": [read_byte(pyboy, ADDR_BATTLE_PLAYER_PP + i) & 0x3F for i in range(4)],
+        "status": read_byte(pyboy, ADDR_BATTLE_PLAYER_STATUS),
+    }
+
+
+def get_battle_enemy_pokemon(pyboy: "PyBoy") -> dict[str, int | list[int]]:
+    """
+    Get detailed info about the enemy Pokemon in battle.
+
+    Reads the enemy Pokemon's battle data including species, types,
+    moves, level, HP, and status.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+
+    Returns:
+        Dictionary with enemy Pokemon data (same structure as player).
+
+    Notes:
+        - Only valid during battles (check is_in_battle() first)
+        - Enemy PP is not easily accessible in Gen 1 memory
+        - Types use game-internal IDs, convert with GAME_TYPE_TO_INDEX
+    """
+    return {
+        "species": read_byte(pyboy, ADDR_BATTLE_ENEMY_SPECIES),
+        "hp": read_word(pyboy, ADDR_ENEMY_HP),
+        "max_hp": read_word(pyboy, ADDR_ENEMY_MAX_HP),
+        "level": read_byte(pyboy, ADDR_BATTLE_ENEMY_LEVEL),
+        "type1": read_byte(pyboy, ADDR_BATTLE_ENEMY_TYPE1),
+        "type2": read_byte(pyboy, ADDR_BATTLE_ENEMY_TYPE2),
+        "moves": [read_byte(pyboy, ADDR_BATTLE_ENEMY_MOVES + i) for i in range(4)],
+        "pp": [],  # Enemy PP not reliably readable in Gen 1
+        "status": read_byte(pyboy, ADDR_BATTLE_ENEMY_STATUS),
+    }
+
+
+def get_stat_modifiers(pyboy: "PyBoy", is_player: bool = True) -> list[int]:
+    """
+    Get in-battle stat modification stages.
+
+    During battle, stat-modifying moves (Swords Dance, Growl, etc.) change
+    stat stages stored in memory. Stages range from 1 (minimum, -6) to
+    13 (maximum, +6), with 7 being neutral (no modification).
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+        is_player: True for player's stat mods, False for enemy's.
+
+    Returns:
+        List of 6 stat stages [attack, defense, speed, special, accuracy, evasion].
+        Each value is 1-13, where 7 = neutral.
+
+    Notes:
+        - Stat stages are reset when a Pokemon switches out
+        - The actual multiplier is: stage/2 for stages 1-7, stage-1 for 8-13
+        - Only valid during battles
+    """
+    base = ADDR_PLAYER_STAT_MODS if is_player else ADDR_ENEMY_STAT_MODS
+    return [read_byte(pyboy, base + i) for i in range(6)]
+
+
+def get_battle_type(pyboy: "PyBoy") -> int:
+    """
+    Get the type of the current battle.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+
+    Returns:
+        Battle type: 0 = wild, 1 = trainer, 2 = scripted.
+        Returns 0 if not in battle.
+
+    Notes:
+        - Wild battles allow running, trainer battles do not
+        - The agent uses this to decide run vs fight strategy
+    """
+    if not is_in_battle(pyboy):
+        return 0
+    return read_byte(pyboy, ADDR_BATTLE_TYPE)
+
+
+def get_facing_direction(pyboy: "PyBoy") -> int:
+    """
+    Get the direction the player sprite is currently facing.
+
+    Args:
+        pyboy: PyBoy emulator instance with the game loaded.
+
+    Returns:
+        Direction as 0-3: 0=down, 1=up, 2=left, 3=right.
+
+    Notes:
+        - The game stores sprite direction as 0x00/0x04/0x08/0x0C
+        - We convert to a simple 0-3 index for convenience
+        - Used by the navigator to determine movement direction
+    """
+    raw = read_byte(pyboy, ADDR_FACING_DIRECTION)
+    # Convert sprite direction byte to 0-3 index
+    # 0x00=down(0), 0x04=up(1), 0x08=left(2), 0x0C=right(3)
+    return raw >> 2

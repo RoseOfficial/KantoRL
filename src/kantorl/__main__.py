@@ -176,6 +176,13 @@ def main() -> int:
         help="Enable curriculum learning with auto-checkpointing, HM automation, and LSTM",
     )
 
+    # Modular agent option
+    train_parser.add_argument(
+        "--agent",
+        action="store_true",
+        help="Enable modular agent (quest planner, navigator, battler)",
+    )
+
     # Streaming visualization options
     # These enable real-time visualization of training progress
     train_parser.add_argument(
@@ -482,6 +489,7 @@ def main() -> int:
             stream_color=args.stream_color,
             stream_sprite_id=args.stream_sprite,
             use_curriculum=args.curriculum,
+            use_agent=args.agent,
             enable_wandb=args.wandb,
             wandb_project=args.wandb_project,
             wandb_entity=args.wandb_entity,

@@ -50,6 +50,7 @@ Dependencies:
     - kantorl.global_map: For coordinate conversion
 """
 
+import json
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -65,6 +66,40 @@ from kantorl import memory
 from kantorl.config import KantoConfig
 from kantorl.global_map import GLOBAL_MAP_HEIGHT, GLOBAL_MAP_WIDTH, local_to_global
 from kantorl.rewards import GameState, RewardFunction, create_reward
+
+# =============================================================================
+# NAMED EVENT MILESTONE MAP
+# =============================================================================
+# Maps specific event flag bit indices to human-readable milestone names.
+# Loaded lazily from data/events.json (80 curated milestones).
+# Used to decode opaque event counts into meaningful progress indicators.
+
+_MILESTONE_MAP: dict[int, str] | None = None
+
+
+def _load_milestones() -> dict[int, str]:
+    """
+    Load named event milestones from the JSON data file.
+
+    Implements lazy loading with module-level caching — the file is read
+    once per process (important since SubprocVecEnv forks per env).
+
+    Returns:
+        Dictionary mapping event flag bit indices to milestone names.
+        Returns empty dict if the data file is not found.
+    """
+    global _MILESTONE_MAP
+    if _MILESTONE_MAP is None:
+        data_path = Path(__file__).parent / "data" / "events.json"
+        if data_path.exists():
+            with open(data_path) as f:
+                raw = json.load(f)
+            # JSON keys are strings — convert to int for direct array indexing
+            _MILESTONE_MAP = {int(k): v for k, v in raw.items()}
+        else:
+            _MILESTONE_MAP = {}
+    return _MILESTONE_MAP
+
 
 # =============================================================================
 # ACTION MAPPING CONSTANTS
@@ -162,6 +197,7 @@ class KantoRedEnv(gym.Env):
         rom_path: str | None = None,
         reward_fn: RewardFunction | str = "default",
         render_mode: str | None = None,
+        initial_step_offset: int = 0,
     ):
         """
         Initialize the Pokemon Red environment.
@@ -179,6 +215,10 @@ class KantoRedEnv(gym.Env):
                         - 'human': Opens SDL2 window showing gameplay
                         - 'rgb_array': Returns screen as numpy array
                         - None: Headless mode (fastest for training)
+            initial_step_offset: Number of steps to pre-advance the step counter
+                   on the first episode only. This staggers episode truncation
+                   across parallel environments so they don't all reset at the
+                   same global step (which causes sawtooth metric patterns).
 
         Raises:
             ValueError: If no ROM path is provided via config or argument.
@@ -248,6 +288,11 @@ class KantoRedEnv(gym.Env):
         # Step counter for current episode
         self.step_count = 0
 
+        # Stagger offset: pre-advances step counter on first episode only
+        # so parallel envs truncate at different times instead of all at once
+        self._initial_step_offset = initial_step_offset
+        self._first_episode = True
+
         # Previous game state for reward delta calculation
         self.prev_state: GameState | None = None
 
@@ -275,6 +320,21 @@ class KantoRedEnv(gym.Env):
         # Cached event count from _get_observation() — reused by reward and info
         # to avoid redundant 312-byte memory reads per step
         self._last_event_count: int = 0
+
+        # =================================================================
+        # Full Event Flag Tracking
+        # =================================================================
+
+        # Maps event flag bit indices to human-readable milestone names
+        # Loaded once per process via _load_milestones() lazy cache
+        self._milestone_map: dict[int, str] = _load_milestones()
+
+        # Previous step's event flags — used for step-to-step diff
+        # Starts as zeros so first observation captures all pre-set events
+        self._prev_events: np.ndarray = np.zeros(2560, dtype=np.int8)
+
+        # Bit indices of events newly set THIS step (for IPC to callbacks)
+        self._new_event_indices: list[int] = []
 
         # =================================================================
         # Fourier Encoding Cache
@@ -543,8 +603,14 @@ class KantoRedEnv(gym.Env):
         # Reset Episode Tracking
         # =================================================================
 
-        # Reset step counter
-        self.step_count = 0
+        # On the first episode, apply the stagger offset so parallel envs
+        # truncate at different times instead of all at once.
+        # After the first episode, envs are naturally desynchronized.
+        if self._first_episode and self._initial_step_offset > 0:
+            self.step_count = self._initial_step_offset
+            self._first_episode = False
+        else:
+            self.step_count = 0
 
         # Clear previous state (no delta on first step)
         self.prev_state = None
@@ -560,6 +626,10 @@ class KantoRedEnv(gym.Env):
 
         # Clear Fourier encoding cache
         self._level_cache_key = ()
+
+        # Reset event flag tracking for new episode
+        self._prev_events = np.zeros(2560, dtype=np.int8)
+        self._new_event_indices = []
 
         # Reset reward function internal state
         self.reward_fn.reset()
@@ -763,6 +833,17 @@ class KantoRedEnv(gym.Env):
         self._last_event_count = int(np.sum(events))
 
         # =================================================================
+        # Detect Newly Set Event Flags
+        # =================================================================
+
+        # Vectorized numpy diff finds all 2560 flags that flipped 0→1 this step.
+        # Cost: ~5 microseconds for 2560 elements — cheaper than the old 80-item
+        # dict loop because numpy operates in C without Python object overhead.
+        newly_set = np.where((events == 1) & (self._prev_events == 0))[0]
+        self._new_event_indices = newly_set.tolist()
+        self._prev_events = events.copy()
+
+        # =================================================================
         # Build and Return Observation Dict
         # =================================================================
 
@@ -919,6 +1000,7 @@ class KantoRedEnv(gym.Env):
             "position": (x, y),
             "badges": memory.get_badges(self.pyboy),
             "events": self._last_event_count,
+            "new_event_indices": self._new_event_indices,
             "party_count": memory.get_party_count(self.pyboy),
             "in_battle": memory.is_in_battle(self.pyboy),
             "explore_tiles": int(np.sum(self.explore_map > 0)),
@@ -969,6 +1051,8 @@ def make_env(
     reward_fn: str = "default",
     enable_streaming: bool = False,
     enable_curriculum: bool = False,
+    enable_agent: bool = False,
+    initial_step_offset: int = 0,
 ) -> callable:
     """
     Factory function for creating environments in vectorized setup.
@@ -984,6 +1068,10 @@ def make_env(
         reward_fn: Reward function name ('default', 'badges_only', 'exploration').
         enable_streaming: Whether to wrap with StreamWrapper for visualization.
         enable_curriculum: Whether to wrap with CurriculumWrapper for curriculum learning.
+        enable_agent: Whether to wrap with AgentWrapper for modular agent system.
+        initial_step_offset: Step counter offset for the first episode, used to
+            stagger episode truncation across parallel environments. Routed to
+            CurriculumWrapper if curriculum is active, otherwise to KantoRedEnv.
 
     Returns:
         Callable that returns an initialized Gymnasium environment.
@@ -996,6 +1084,7 @@ def make_env(
     Notes:
         - Each environment gets a unique seed based on rank
         - StreamWrapper is optionally applied for real-time visualization
+        - AgentWrapper is applied after CurriculumWrapper, before StreamWrapper
         - The returned callable is invoked by the vectorized env wrapper
     """
 
@@ -1011,7 +1100,13 @@ def make_env(
         cfg.rom_path = rom_path
 
         # Create the base environment
-        env = KantoRedEnv(config=cfg, reward_fn=reward_fn)
+        # If curriculum is active, the stagger offset is handled by CurriculumWrapper
+        # (which overrides truncation logic). Otherwise, KantoRedEnv handles it.
+        env = KantoRedEnv(
+            config=cfg,
+            reward_fn=reward_fn,
+            initial_step_offset=initial_step_offset if not enable_curriculum else 0,
+        )
 
         # Reset with unique seed based on rank
         env.reset(seed=seed + rank)
@@ -1025,7 +1120,16 @@ def make_env(
                 env,
                 pool_dir=cfg.session_path / "checkpoint_pool",
                 config=cfg,
+                initial_step_offset=initial_step_offset,
             )
+
+        # Optionally wrap with AgentWrapper for modular agent system
+        # Must come after CurriculumWrapper (needs post-checkpoint game state)
+        # and before StreamWrapper (streaming doesn't need agent observations)
+        if enable_agent and cfg.enable_agent:
+            from kantorl.agent import AgentWrapper
+
+            env = AgentWrapper(env, config=cfg)
 
         # Optionally wrap with StreamWrapper for visualization
         if enable_streaming and cfg.enable_streaming:

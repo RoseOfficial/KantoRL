@@ -1,0 +1,125 @@
+{
+  "initial_state": "get_starter",
+  "states": {
+    "get_starter": {
+      "description": "Get starter Pokemon from Oak's Lab",
+      "target_map_id": 40,
+      "transitions": [
+        {"condition": {"min_events": 3}, "next_state": "deliver_parcel"}
+      ]
+    },
+    "deliver_parcel": {
+      "description": "Deliver Oak's Parcel from Viridian Mart",
+      "target_map_id": 1,
+      "transitions": [
+        {"condition": {"min_events": 5}, "next_state": "get_pokedex"}
+      ]
+    },
+    "get_pokedex": {
+      "description": "Return to Oak's Lab for Pokedex",
+      "target_map_id": 40,
+      "transitions": [
+        {"condition": {"min_events": 8}, "next_state": "route_1_north"}
+      ]
+    },
+    "route_1_north": {
+      "description": "Travel north through Route 1 to Viridian City",
+      "target_map_id": 1,
+      "transitions": [
+        {"condition": {"visited_map": 1}, "next_state": "viridian_forest"}
+      ]
+    },
+    "viridian_forest": {
+      "description": "Navigate through Viridian Forest",
+      "target_map_id": 51,
+      "transitions": [
+        {"condition": {"visited_map": 51}, "next_state": "reach_pewter"}
+      ]
+    },
+    "reach_pewter": {
+      "description": "Reach Pewter City",
+      "target_map_id": 2,
+      "transitions": [
+        {"condition": {"visited_map": 2}, "next_state": "beat_brock"}
+      ]
+    },
+    "beat_brock": {
+      "description": "Defeat Brock at Pewter Gym for Boulder Badge",
+      "target_map_id": 54,
+      "required_badges": 0,
+      "transitions": [
+        {"condition": {"min_badges": 1}, "next_state": "route_3_east"}
+      ]
+    },
+    "route_3_east": {
+      "description": "Travel east through Route 3 toward Mt. Moon",
+      "target_map_id": 14,
+      "transitions": [
+        {"condition": {"visited_map": 14}, "next_state": "mt_moon"}
+      ]
+    },
+    "mt_moon": {
+      "description": "Navigate through Mt. Moon",
+      "target_map_id": 59,
+      "transitions": [
+        {"condition": {"visited_map": 59}, "next_state": "reach_cerulean"}
+      ]
+    },
+    "reach_cerulean": {
+      "description": "Exit Mt. Moon and reach Cerulean City",
+      "target_map_id": 3,
+      "transitions": [
+        {"condition": {"visited_map": 3}, "next_state": "nugget_bridge"}
+      ]
+    },
+    "nugget_bridge": {
+      "description": "Cross Nugget Bridge (Route 24) and visit Bill",
+      "target_map_id": 35,
+      "transitions": [
+        {"condition": {"min_events": 30}, "next_state": "beat_misty"}
+      ]
+    },
+    "beat_misty": {
+      "description": "Defeat Misty at Cerulean Gym for Cascade Badge",
+      "target_map_id": 65,
+      "required_badges": 1,
+      "transitions": [
+        {"condition": {"min_badges": 2}, "next_state": "route_5_south"}
+      ]
+    },
+    "route_5_south": {
+      "description": "Travel south through Route 5 toward Vermilion",
+      "target_map_id": 16,
+      "transitions": [
+        {"condition": {"visited_map": 16}, "next_state": "reach_vermilion"}
+      ]
+    },
+    "reach_vermilion": {
+      "description": "Reach Vermilion City",
+      "target_map_id": 5,
+      "transitions": [
+        {"condition": {"visited_map": 5}, "next_state": "ss_anne"}
+      ]
+    },
+    "ss_anne": {
+      "description": "Board the S.S. Anne and get HM01 Cut",
+      "target_map_id": 5,
+      "transitions": [
+        {"condition": {"min_events": 50}, "next_state": "beat_surge"}
+      ]
+    },
+    "beat_surge": {
+      "description": "Defeat Lt. Surge at Vermilion Gym for Thunder Badge",
+      "target_map_id": 92,
+      "required_badges": 2,
+      "transitions": [
+        {"condition": {"min_badges": 3}, "next_state": "explore_post_surge"}
+      ]
+    },
+    "explore_post_surge": {
+      "description": "Continue exploring after Thunder Badge",
+      "target_map_id": -1,
+      "transitions": []
+    }
+  }
+}

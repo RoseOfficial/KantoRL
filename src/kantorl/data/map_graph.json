@@ -1,0 +1,34 @@
+{
+  "edges": [
+    {"from": 0, "to": 12, "from_x": 5, "from_y": 0, "to_x": 5, "to_y": 17, "requires_hm": null, "one_way": false, "note": "Pallet Town ↔ Route 1 (north exit)"},
+    {"from": 12, "to": 1, "from_x": 5, "from_y": 0, "to_x": 5, "to_y": 17, "requires_hm": null, "one_way": false, "note": "Route 1 ↔ Viridian City (north exit)"},
+    {"from": 1, "to": 13, "from_x": 9, "from_y": 0, "to_x": 3, "to_y": 35, "requires_hm": null, "one_way": false, "note": "Viridian City ↔ Route 2 (north exit)"},
+    {"from": 13, "to": 51, "from_x": 3, "from_y": 19, "to_x": 1, "to_y": 43, "requires_hm": null, "one_way": false, "note": "Route 2 ↔ Viridian Forest (through gate)"},
+    {"from": 51, "to": 2, "from_x": 1, "from_y": 0, "to_x": 5, "to_y": 17, "requires_hm": null, "one_way": false, "note": "Viridian Forest ↔ Pewter City (north exit, through gate)"},
+    {"from": 2, "to": 14, "from_x": 17, "from_y": 9, "to_x": 0, "to_y": 3, "requires_hm": null, "one_way": false, "note": "Pewter City ↔ Route 3 (east exit)"},
+    {"from": 14, "to": 15, "from_x": 35, "from_y": 3, "to_x": 0, "to_y": 3, "requires_hm": null, "one_way": false, "note": "Route 3 ↔ Route 4 (via Mt Moon)"},
+    {"from": 15, "to": 3, "from_x": 17, "from_y": 3, "to_x": 0, "to_y": 9, "requires_hm": null, "one_way": false, "note": "Route 4 ↔ Cerulean City (east exit)"},
+    {"from": 3, "to": 35, "from_x": 10, "from_y": 0, "to_x": 5, "to_y": 17, "requires_hm": null, "one_way": false, "note": "Cerulean City ↔ Route 24 / Nugget Bridge (north exit)"},
+    {"from": 35, "to": 36, "from_x": 5, "from_y": 0, "to_x": 0, "to_y": 3, "requires_hm": null, "one_way": false, "note": "Route 24 ↔ Route 25 / Bill's House (east)"},
+    {"from": 3, "to": 16, "from_x": 10, "from_y": 17, "to_x": 5, "to_y": 0, "requires_hm": null, "one_way": false, "note": "Cerulean City ↔ Route 5 (south exit)"},
+    {"from": 16, "to": 10, "from_x": 5, "from_y": 17, "to_x": 5, "to_y": 0, "requires_hm": null, "one_way": false, "note": "Route 5 ↔ Saffron City (through gate)"},
+    {"from": 10, "to": 17, "from_x": 5, "from_y": 17, "to_x": 5, "to_y": 0, "requires_hm": null, "one_way": false, "note": "Saffron City ↔ Route 6 (south exit)"},
+    {"from": 17, "to": 5, "from_x": 5, "from_y": 17, "to_x": 5, "to_y": 0, "requires_hm": null, "one_way": false, "note": "Route 6 ↔ Vermilion City (south exit)"},
+    {"from": 16, "to": 5, "from_x": 5, "from_y": 17, "to_x": 5, "to_y": 0, "requires_hm": null, "one_way": false, "note": "Route 5 ↔ Vermilion City (through underground, shortcut)"},
+    {"from": 1, "to": 33, "from_x": 0, "from_y": 9, "to_x": 17, "to_y": 5, "requires_hm": null, "one_way": false, "note": "Viridian City ↔ Route 22 (west exit)"},
+    {"from": 0, "to": 32, "from_x": 5, "from_y": 17, "to_x": 5, "to_y": 0, "requires_hm": null, "one_way": false, "note": "Pallet Town ↔ Route 21 (south, requires Surf)"},
+    {"from": 3, "to": 20, "from_x": 17, "from_y": 9, "to_x": 0, "to_y": 3, "requires_hm": "cut", "one_way": false, "note": "Cerulean City ↔ Route 9 (east, requires Cut)"},
+    {"from": 20, "to": 21, "from_x": 17, "from_y": 3, "to_x": 5, "to_y": 0, "requires_hm": null, "one_way": false, "note": "Route 9 ↔ Route 10 (south to Rock Tunnel)"}
+  ],
+  "pokemon_centers": {
+    "1": {"map_id": 41, "name": "Viridian Pokemon Center", "city_map": 1},
+    "2": {"map_id": 58, "name": "Pewter Pokemon Center", "city_map": 2},
+    "3": {"map_id": 68, "name": "Cerulean Pokemon Center", "city_map": 3},
+    "5": {"map_id": 89, "name": "Vermilion Pokemon Center", "city_map": 5}
+  },
+  "gyms": {
+    "0": {"map_id": 54, "name": "Pewter Gym", "city_map": 2},
+    "1": {"map_id": 65, "name": "Cerulean Gym", "city_map": 3},
+    "2": {"map_id": 92, "name": "Vermilion Gym", "city_map": 5}
+  }
+}
