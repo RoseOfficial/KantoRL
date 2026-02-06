@@ -249,10 +249,13 @@ class KantoConfig:
     # Different IDs show different Pokemon trainer sprites
     stream_sprite_id: int = 0
 
-    # Number of steps between coordinate uploads
-    # Lower values = smoother visualization but more network traffic
-    # 30 steps ≈ ~2-3 uploads/sec per env at typical training speed
-    stream_interval: int = 30
+    # Number of steps between coordinate uploads.
+    # The transdimensional.xyz server animates each message's coords over a
+    # fixed time window — more coords per message = faster apparent movement.
+    # 256 coords/message at ~69 steps/sec ≈ one upload every ~3.7s per env,
+    # with enough data points for smooth walking-pace animation on the map.
+    # Non-blocking sender thread ensures no training throughput impact.
+    stream_interval: int = 256
 
     # Additional text to display alongside this agent's marker
     # Can be used to show training progress, hyperparameters, etc.
