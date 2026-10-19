@@ -7,14 +7,13 @@ name = "kantorl"
 version = "0.1.0"
 description = "The MNIST of Pokemon Red for Reinforcement Learning"
 readme = "README.md"
-license = "MIT"
+license = "LicenseRef-Proprietary"
 requires-python = ">=3.10"
 authors = [{ name = "KantoRL Contributors" }]
 keywords = ["reinforcement-learning", "pokemon", "gymnasium", "ppo"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

@@ -134,4 +134,4 @@ env = KantoRedEnv(rom_path="pokemon_red.gb", reward_fn=MyReward())
 
 ## License
 
-MIT
+All rights reserved. See [LICENSE](LICENSE).
