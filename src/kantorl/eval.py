@@ -59,10 +59,12 @@ Dependencies:
 """
 
 import numpy as np
+from gymnasium import spaces
 from stable_baselines3 import PPO
 
 from kantorl.config import KantoConfig
 from kantorl.env import KantoRedEnv
+from kantorl.obs import DEFAULT_OBS_COMPONENTS, OBS_COMPONENTS
 
 
 # =============================================================================
@@ -148,6 +150,17 @@ def evaluate(
     # and training statistics (though we only need the policy for evaluation)
     model = PPO.load(checkpoint_path)
 
+    # Reconstruct the observation tier from the checkpoint. Checkpoints trained
+    # on a subset (e.g. screens only) declare a smaller Dict space; loading them
+    # into the default environment would fail with an observation-shape mismatch.
+    obs_keys: tuple[str, ...] = DEFAULT_OBS_COMPONENTS
+    if isinstance(model.observation_space, spaces.Dict):
+        known = tuple(
+            key for key in model.observation_space.spaces if key in OBS_COMPONENTS
+        )
+        if known:
+            obs_keys = known
+
     # -------------------------------------------------------------------------
     # Environment Setup
     # -------------------------------------------------------------------------
@@ -155,6 +168,7 @@ def evaluate(
     config = KantoConfig(
         rom_path=rom_path,
         max_steps=max_steps,  # Override default to use evaluation max_steps
+        obs_components=obs_keys,
     )
 
     # Set render mode based on user preference

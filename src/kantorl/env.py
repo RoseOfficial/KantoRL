@@ -21,6 +21,8 @@ Key Design Decisions:
     - Exploration bitmap: 48x48 downscaled global map of visited locations
 
 Observation Space Components:
+    Selected by ``KantoConfig.obs_components``. The default reproduces the
+    historical observation exactly; omit entries to run a leaner tier.
     - screens: (3, 72, 80) stacked grayscale frames for visual input
     - health: (1,) party HP fraction [0, 1] for survival awareness
     - level: (8,) Fourier-encoded party levels for progress tracking
@@ -65,6 +67,13 @@ from pyboy.utils import WindowEvent
 from kantorl import memory
 from kantorl.config import KantoConfig
 from kantorl.global_map import GLOBAL_MAP_HEIGHT, GLOBAL_MAP_WIDTH, local_to_global
+from kantorl.obs import (
+    ACTION_HISTORY_LEN,
+    EVENT_OBS_DIM,
+    MAP_OBS_SHAPE,
+    ObsContext,
+    build_producers,
+)
 from kantorl.rewards import GameState, RewardFunction, create_reward
 
 # =============================================================================
@@ -248,6 +257,16 @@ class KantoRedEnv(gym.Env):
             )
 
         # =================================================================
+        # Observation Producers
+        # =================================================================
+
+        # Build the configured observation components. This is the seam that
+        # turns "pixels only" vs "full RAM observation" into a config choice.
+        # The default tuple reproduces the historical observation exactly.
+        self._producers = build_producers(self.config)
+        self._want_screens = any(p.key == "screens" for p in self._producers)
+
+        # =================================================================
         # Reward Function Setup
         # =================================================================
 
@@ -298,7 +317,7 @@ class KantoRedEnv(gym.Env):
 
         # Recent action history for temporal awareness
         # Helps agent avoid repeating ineffective action patterns
-        self.recent_actions = np.zeros(3, dtype=np.int64)
+        self.recent_actions = np.zeros(ACTION_HISTORY_LEN, dtype=np.int64)
 
         # =================================================================
         # Exploration Tracking
@@ -307,7 +326,7 @@ class KantoRedEnv(gym.Env):
         # 48x48 bitmap tracking visited global coordinates
         # Each pixel represents a region of the Kanto map
         # Value 255 = visited, 0 = not visited
-        self.explore_map = np.zeros((48, 48), dtype=np.uint8)
+        self.explore_map = np.zeros(MAP_OBS_SHAPE, dtype=np.uint8)
 
         # Scale factors for converting global coords to exploration map coords
         # Kanto is ~444x436 tiles, we compress to 48x48
@@ -331,19 +350,10 @@ class KantoRedEnv(gym.Env):
 
         # Previous step's event flags — used for step-to-step diff
         # Starts as zeros so first observation captures all pre-set events
-        self._prev_events: np.ndarray = np.zeros(2560, dtype=np.int8)
+        self._prev_events: np.ndarray = np.zeros(EVENT_OBS_DIM, dtype=np.int8)
 
         # Bit indices of events newly set THIS step (for IPC to callbacks)
         self._new_event_indices: list[int] = []
-
-        # =================================================================
-        # Fourier Encoding Cache
-        # =================================================================
-
-        # Cache for _fourier_encode_levels() — levels change ~once per 1000 steps
-        # Stores (key, result) where key is tuple(levels)
-        self._level_cache_key: tuple[int, ...] = ()
-        self._level_cache_val: np.ndarray = np.zeros(8, dtype=np.float32)
 
         # =================================================================
         # Frame Stacking
@@ -364,94 +374,18 @@ class KantoRedEnv(gym.Env):
 
     def _define_spaces(self) -> None:
         """
-        Define the observation and action spaces for Gymnasium.
+        Derive the Gymnasium spaces from the active observation producers.
 
-        This method sets up self.observation_space and self.action_space
-        according to the Gymnasium API. The observation space is a Dict
-        containing multiple components, and the action space is Discrete(8).
+        The observation space is a Dict whose keys and subspaces come from
+        ``KantoConfig.obs_components``. Because each producer owns both its
+        ``space()`` and its ``read()``, the declared space and the actual
+        observation cannot drift apart.
 
-        The observation space components are designed to provide the agent
-        with all information needed to play Pokemon Red effectively:
-        - Visual input (screens) for navigation and battle
-        - Numeric state (health, level) for decision-making
-        - Progress tracking (badges, events) for long-term goals
-        - Spatial memory (map) for exploration
-        - Action history (recent_actions) for pattern recognition
-
-        Notes:
-            - All components use efficient dtypes (uint8, float32, int8)
-            - Shapes are chosen to be CNN-friendly where applicable
-            - MultiBinary is used for flag arrays for memory efficiency
+        The action space remains Discrete(8):
+        0=NOOP, 1=UP, 2=DOWN, 3=LEFT, 4=RIGHT, 5=A, 6=B, 7=START.
         """
-        # Get screen dimensions from config
-        h, w = self.config.screen_size
-
-        # Define the Dict observation space with all components
         self.observation_space = spaces.Dict(
-            {
-                # =============================================================
-                # Visual Input: Stacked Grayscale Frames
-                # Shape: (frame_stacks, height, width) = (3, 72, 80)
-                # CNN-friendly format with channel-first ordering
-                # =============================================================
-                "screens": spaces.Box(
-                    low=0,
-                    high=255,
-                    shape=(self.config.frame_stacks, h, w),
-                    dtype=np.uint8,
-                ),
-                # =============================================================
-                # Party Health: HP Fraction
-                # Shape: (1,) with value in [0, 1]
-                # 1.0 = full health, 0.0 = all Pokemon fainted
-                # =============================================================
-                "health": spaces.Box(
-                    low=0,
-                    high=1,
-                    shape=(1,),
-                    dtype=np.float32,
-                ),
-                # =============================================================
-                # Party Levels: Fourier-Encoded
-                # Shape: (8,) with values in [-1, 1]
-                # Smooth encoding helps value function generalization
-                # =============================================================
-                "level": spaces.Box(
-                    low=-1,
-                    high=1,
-                    shape=(8,),
-                    dtype=np.float32,
-                ),
-                # =============================================================
-                # Gym Badges: Binary Flags
-                # Shape: (8,) with values 0 or 1
-                # One flag per gym badge in order
-                # =============================================================
-                "badges": spaces.MultiBinary(8),
-                # =============================================================
-                # Event Flags: Binary Flags
-                # Shape: (2560,) with values 0 or 1
-                # Tracks all game events (items, trainers, story)
-                # =============================================================
-                "events": spaces.MultiBinary(2560),
-                # =============================================================
-                # Exploration Map: Visited Areas Bitmap
-                # Shape: (48, 48) with values 0 or 255
-                # Downscaled representation of Kanto region
-                # =============================================================
-                "map": spaces.Box(
-                    low=0,
-                    high=255,
-                    shape=(48, 48),
-                    dtype=np.uint8,
-                ),
-                # =============================================================
-                # Recent Actions: Action History
-                # Shape: (3,) with values 0-7
-                # Last 3 actions for temporal pattern detection
-                # =============================================================
-                "recent_actions": spaces.MultiDiscrete([8, 8, 8]),
-            }
+            {producer.key: producer.space() for producer in self._producers}
         )
 
         # Define discrete action space
@@ -616,19 +550,20 @@ class KantoRedEnv(gym.Env):
         self.prev_state = None
 
         # Clear action history
-        self.recent_actions = np.zeros(3, dtype=np.int64)
+        self.recent_actions = np.zeros(ACTION_HISTORY_LEN, dtype=np.int64)
 
         # Clear exploration map
-        self.explore_map = np.zeros((48, 48), dtype=np.uint8)
+        self.explore_map = np.zeros(MAP_OBS_SHAPE, dtype=np.uint8)
 
         # Clear frame stack
         self.frame_stack = np.zeros_like(self.frame_stack)
 
-        # Clear Fourier encoding cache
-        self._level_cache_key = ()
+        # Clear any producer-local caches (e.g. level encoding)
+        for producer in self._producers:
+            producer.reset()
 
         # Reset event flag tracking for new episode
-        self._prev_events = np.zeros(2560, dtype=np.int8)
+        self._prev_events = np.zeros(EVENT_OBS_DIM, dtype=np.int8)
         self._new_event_indices = []
 
         # Reset reward function internal state
@@ -772,92 +707,59 @@ class KantoRedEnv(gym.Env):
 
     def _get_observation(self) -> dict[str, np.ndarray]:
         """
-        Build the observation dictionary from current game state.
+        Build the observation dict from the active producers.
 
-        Extracts all observation components from the emulator and game
-        memory, combining them into a dictionary matching observation_space.
+        Memory is read once per step and placed in an ObsContext; producers
+        then transform only the fields they need. This preserves the original
+        single-read behavior (event flags are still unpacked once and reused
+        by reward/info) while allowing components to be dropped from the tier.
 
         Returns:
-            Dict with keys matching observation_space:
-            - screens: Stacked grayscale frames
-            - health: Party HP fraction
-            - level: Fourier-encoded party levels
-            - badges: Gym badge flags
-            - events: Event flags
-            - map: Exploration bitmap
-            - recent_actions: Action history
+            Dict whose keys match ``self.observation_space.spaces``.
         """
-        # =================================================================
-        # Update Frame Stack (in-place shift avoids allocation)
-        # =================================================================
+        # Update the frame stack only if the screen is actually observed.
+        # RAM-only tiers can skip the RGB conversion and resize entirely.
+        if self._want_screens:
+            screen = self._get_screen_gray()
+            self.frame_stack[:-1] = self.frame_stack[1:]
+            self.frame_stack[-1] = screen
 
-        # Get current screen as grayscale
-        screen = self._get_screen_gray()
-
-        # Shift frames in-place: move frames 1,2 to positions 0,1
-        # This avoids np.roll() which allocates a new array every step
-        self.frame_stack[:-1] = self.frame_stack[1:]
-
-        # Add new frame at the end
-        self.frame_stack[-1] = screen
-
-        # =================================================================
-        # Get Party Health
-        # =================================================================
-
-        # Get total HP across all party Pokemon
+        # Read shared state once per step.
         current_hp, max_hp = memory.get_total_party_hp(self.pyboy)
 
-        # Calculate fraction [0, 1], avoiding division by zero
-        health = np.array([current_hp / max(max_hp, 1)], dtype=np.float32)
+        levels: tuple[int, ...] = ()
+        if "level" in self.config.obs_components:
+            levels = tuple(memory.get_party_levels(self.pyboy))
 
-        # =================================================================
-        # Encode Party Levels
-        # =================================================================
+        badge_flags = None
+        if "badges" in self.config.obs_components:
+            badge_flags = memory.get_badge_flags(self.pyboy)
 
-        # Get levels and apply Fourier encoding
-        levels = memory.get_party_levels(self.pyboy)
-        level_encoded = self._fourier_encode_levels(levels)
-
-        # =================================================================
-        # Get Progress Flags
-        # =================================================================
-
-        # Badge flags (8 binary values)
-        badges = memory.get_badge_flags(self.pyboy)
-
-        # Event flags (2560 binary values)
-        # Cache the count for reuse by reward calculation and _get_info(),
-        # avoiding a redundant 312-byte memory read
+        # Event flags are needed by the reward and info dict even when they
+        # are not exposed to the policy, so this read is unconditional.
         events = memory.get_event_flags(self.pyboy)
         self._last_event_count = int(np.sum(events))
 
-        # =================================================================
-        # Detect Newly Set Event Flags
-        # =================================================================
-
-        # Vectorized numpy diff finds all 2560 flags that flipped 0→1 this step.
-        # Cost: ~5 microseconds for 2560 elements — cheaper than the old 80-item
-        # dict loop because numpy operates in C without Python object overhead.
+        # Vectorized diff finds every flag that flipped 0→1 this step.
         newly_set = np.where((events == 1) & (self._prev_events == 0))[0]
         self._new_event_indices = newly_set.tolist()
         self._prev_events = events.copy()
 
-        # =================================================================
-        # Build and Return Observation Dict
-        # =================================================================
+        ctx = ObsContext(
+            pyboy=self.pyboy,
+            frame_stack=self.frame_stack if self._want_screens else None,
+            explore_map=self.explore_map,
+            recent_actions=self.recent_actions,
+            event_flags=events,
+            badge_flags=badge_flags,
+            levels=levels,
+            current_hp=current_hp,
+            max_hp=max_hp,
+        )
 
         # No .copy() needed: SubprocVecEnv pickles observations for IPC
-        # (inherent copy), and originals are overwritten on the next step
-        return {
-            "screens": self.frame_stack,
-            "health": health,
-            "level": level_encoded,
-            "badges": badges,
-            "events": events,
-            "map": self.explore_map,
-            "recent_actions": self.recent_actions,
-        }
+        # (inherent copy), and originals are overwritten on the next step.
+        return {producer.key: producer.read(ctx) for producer in self._producers}
 
     def _get_screen_gray(self) -> np.ndarray:
         """
@@ -885,60 +787,6 @@ class KantoRedEnv(gym.Env):
         # cv2.resize takes (width, height) — opposite of numpy's (height, width)
         h, w = self.config.screen_size
         return cv2.resize(gray, (w, h), interpolation=cv2.INTER_AREA)
-
-    def _fourier_encode_levels(self, levels: list[int], dim: int = 8) -> np.ndarray:
-        """
-        Fourier-encode party levels for smoother value function learning.
-
-        Instead of passing raw level values, we encode them using sine and
-        cosine functions at multiple frequencies. This creates a smoother
-        representation that helps the neural network generalize better.
-
-        Results are cached because levels change ~once per 1000+ steps (only
-        on level-up), avoiding redundant trig computation on every step.
-
-        Args:
-            levels: List of party Pokemon levels (1-100 each).
-            dim: Output dimension (must be even). Default 8.
-
-        Returns:
-            Float32 array of shape (dim,) with values in [-1, 1].
-            Returns zeros if levels is empty.
-
-        Notes:
-            - Uses average level normalized to [0, 1]
-            - Encodes with dim/2 sine and dim/2 cosine features
-            - This is similar to positional encoding in transformers
-        """
-        # Handle empty party
-        if not levels:
-            return np.zeros(dim, dtype=np.float32)
-
-        # Check cache — levels rarely change so this hits ~99.9% of steps
-        key = tuple(levels)
-        if key == self._level_cache_key:
-            return self._level_cache_val
-
-        # Normalize average level to [0, 1]
-        # Max level is 100, so divide by 100
-        avg_level = np.mean(levels) / 100.0
-
-        # Generate Fourier features at multiple frequencies
-        # Higher frequencies capture finer level differences
-        freqs = np.arange(1, dim // 2 + 1)
-
-        # Compute sine and cosine features
-        sin_features = np.sin(2 * np.pi * freqs * avg_level)
-        cos_features = np.cos(2 * np.pi * freqs * avg_level)
-
-        # Concatenate for final feature vector
-        features = np.concatenate([sin_features, cos_features]).astype(np.float32)
-
-        # Update cache
-        self._level_cache_key = key
-        self._level_cache_val = features
-
-        return features
 
     def _update_explore_map(self) -> None:
         """

@@ -99,6 +99,7 @@ from kantorl.callbacks import (
 )
 from kantorl.config import KantoConfig
 from kantorl.env import make_env
+from kantorl.obs import DEFAULT_OBS_COMPONENTS
 
 if TYPE_CHECKING:
     import wandb
@@ -249,6 +250,7 @@ def train(
     wandb_entity: str | None = None,
     wandb_group: str | None = None,
     use_agent: bool = False,
+    obs_components: tuple[str, ...] | None = None,
 ) -> None:
     """
     Run PPO training on Pokemon Red.
@@ -303,6 +305,9 @@ def train(
         use_agent: Enable modular agent system with quest planning, navigation
                   reward shaping, rule-based battle control, and dialogue handling.
                   Requires: --no-resume for first run (observation space changes).
+        obs_components: Observation components exposed to the policy. None uses
+                       the legacy seven-component observation. Pass a subset to
+                       run an ablation tier, e.g. ``("screens",)`` for pixels only.
 
     Side Effects:
         - Creates session_path directory if it doesn't exist
@@ -354,6 +359,11 @@ def train(
         wandb_project=wandb_project,
         wandb_entity=wandb_entity,
         wandb_group=wandb_group,
+        obs_components=(
+            tuple(obs_components)
+            if obs_components is not None
+            else DEFAULT_OBS_COMPONENTS
+        ),
     )
 
     # -------------------------------------------------------------------------
@@ -707,6 +717,20 @@ def main() -> None:
         default=42,
         help="Random seed for reproducibility (default: 42)",
     )
+    # Observation tier: subsets are prior ablations, not just speed knobs.
+    from kantorl.obs import OBS_COMPONENTS
+
+    parser.add_argument(
+        "--obs",
+        nargs="+",
+        choices=list(OBS_COMPONENTS),
+        default=None,
+        metavar="COMPONENT",
+        help=(
+            "Observation components to expose. Defaults to all seven. "
+            "Example: --obs screens (pixels only)."
+        ),
+    )
 
     # -------------------------------------------------------------------------
     # Streaming Options
@@ -779,6 +803,7 @@ def main() -> None:
         resume=not args.no_resume,  # --no-resume flag inverts resume=True default
         reward_fn=args.reward,
         seed=args.seed,
+        obs_components=tuple(args.obs) if args.obs else None,
         enable_streaming=args.stream,
         stream_username=args.stream_user,
         stream_color=args.stream_color,

@@ -62,6 +62,10 @@ class KantoConfig:
             Helps the agent perceive motion and changes over time.
         screen_size (tuple[int, int]): Downscaled screen dimensions (height, width).
             Original GameBoy: 144x160. Default 72x80 = 4x reduction.
+        obs_components (tuple[str, ...]): Observation producers to expose to the
+            policy. Defaults to the legacy seven-component observation. Removing
+            components is how observation tiers are defined: ``("screens",)`` is
+            pixels-only, while the default includes RAM-derived progress oracles.
 
         reward_scale (float): Global multiplier for all rewards.
             Lower values encourage exploration, higher values exploit known strategies.
@@ -159,6 +163,22 @@ class KantoConfig:
     # 72x80 is a 4x reduction, balancing detail vs computational cost
     # Must be a tuple of (height, width) to match numpy array conventions
     screen_size: tuple[int, int] = (72, 80)
+
+    # Observation components exposed to the policy, in dict order.
+    # Default = the historical seven-component observation, so existing runs
+    # and checkpoints are unchanged. Removing entries is a prior ablation:
+    #   ("screens",)                    -> pixels only
+    #   ("screens", "health", "events") -> minimal progress signal
+    # See kantorl.obs for the registry and each producer's space.
+    obs_components: tuple[str, ...] = (
+        "screens",
+        "health",
+        "level",
+        "badges",
+        "events",
+        "map",
+        "recent_actions",
+    )
 
     # =============================================================================
     # REWARD SETTINGS
@@ -396,6 +416,33 @@ class KantoConfig:
             raise ValueError(
                 f"frame_stacks must be >= 1, got {self.frame_stacks}. "
                 "The observation must include at least one frame."
+            )
+
+        # Normalize obs_components: YAML/JSON configs provide lists, but the
+        # field is a tuple so it stays hashable and cannot be mutated in place.
+        if isinstance(self.obs_components, list):
+            self.obs_components = tuple(self.obs_components)
+
+        if not self.obs_components:
+            raise ValueError("obs_components must contain at least one component")
+
+        if any(not isinstance(name, str) for name in self.obs_components):
+            raise ValueError("obs_components must be a sequence of strings")
+
+        if len(set(self.obs_components)) != len(self.obs_components):
+            raise ValueError(
+                f"obs_components contains duplicates: {self.obs_components}"
+            )
+
+        # Imported lazily to avoid a module-level dependency between config
+        # and the observation registry.
+        from kantorl.obs import OBS_COMPONENTS
+
+        unknown = [name for name in self.obs_components if name not in OBS_COMPONENTS]
+        if unknown:
+            raise ValueError(
+                f"Unknown observation component(s): {unknown}. "
+                f"Available: {sorted(OBS_COMPONENTS)}"
             )
 
         # Validate reward_scale: must be positive and reasonable

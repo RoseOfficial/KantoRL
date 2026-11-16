@@ -70,6 +70,7 @@ src/kantorl/
 ├── config.py      # Simple dataclass configuration
 ├── memory.py      # Documented memory reading
 ├── rewards.py     # Protocol-based reward system
+├── obs/           # Composable observation producers
 ├── env.py         # Main Gymnasium environment
 ├── train.py       # PPO training script
 ├── callbacks.py   # Training callbacks
@@ -79,17 +80,37 @@ src/kantorl/
 
 ## Observation Space
 
-```python
-{
-    "screens": Box(0, 255, (3, 72, 80)),    # Stacked grayscale frames
-    "health": Box(0, 1, (1,)),              # Party HP fraction
-    "level": Box(-1, 1, (8,)),              # Fourier-encoded levels
-    "badges": MultiBinary(8),                # Gym badges
-    "events": MultiBinary(2560),             # Event flags
-    "map": Box(0, 255, (48, 48)),           # Exploration bitmap
-    "recent_actions": MultiDiscrete([8]*3), # Last 3 actions
-}
+The observation is composed from a configurable list of producers. The default
+reproduces the original observation exactly; dropping components is how prior
+ablations (tiers) are expressed:
+
+```bash
+# Pixels only — closest to tabula rasa
+kantorl train pokemon_red.gb --obs screens
+
+# Minimal progress signal
+kantorl train pokemon_red.gb --obs screens health events
 ```
+
+| Key | Space | What it gives the policy |
+|---|---|---|
+| `screens` | `Box(0, 255, (3, 72, 80))` | Stacked grayscale frames |
+| `health` | `Box(0, 1, (1,))` | Party HP fraction |
+| `level` | `Box(-1, 1, (8,))` | Fourier-encoded party levels |
+| `badges` | `MultiBinary(8)` | Per-badge flags |
+| `events` | `MultiBinary(2560)` | Full event-flag bitfield (progress oracle) |
+| `map` | `Box(0, 255, (48, 48))` | Exploration bitmap |
+| `recent_actions` | `MultiDiscrete([8]*3)` | Last three actions |
+
+In Python:
+
+```python
+config = KantoConfig(rom_path="pokemon_red.gb", obs_components=("screens",))
+env = KantoRedEnv(config=config)
+```
+
+Evaluation reconstructs the tier from the checkpoint's observation space, so a
+pixels-only model loads without a shape mismatch.
 
 ## Action Space
 

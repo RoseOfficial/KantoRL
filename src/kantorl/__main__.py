@@ -162,6 +162,21 @@ def main() -> int:
         choices=["default", "badges_only", "exploration"],
         help="Reward function to use (default: default)",
     )
+    # Observation tier: selecting a subset is how priors are ablated.
+    # Imported here so `kantorl --help` does not pay for gymnasium/numpy.
+    from kantorl.obs import OBS_COMPONENTS
+
+    train_parser.add_argument(
+        "--obs",
+        nargs="+",
+        choices=list(OBS_COMPONENTS),
+        default=None,
+        metavar="COMPONENT",
+        help=(
+            "Observation components to expose. Defaults to all seven. "
+            "Example: --obs screens (pixels only)."
+        ),
+    )
     train_parser.add_argument(
         "--seed",
         type=int,
@@ -484,6 +499,7 @@ def main() -> int:
             resume=not args.no_resume,  # --no-resume inverts the default True
             reward_fn=args.reward,
             seed=args.seed,
+            obs_components=tuple(args.obs) if args.obs else None,
             enable_streaming=args.stream,
             stream_username=args.stream_user,
             stream_color=args.stream_color,
@@ -531,7 +547,13 @@ def main() -> int:
         # These are the key settings users might want to know
         print("Default Configuration:")
         config = KantoConfig()
-        for field_name in ["action_freq", "max_steps", "frame_stacks", "screen_size"]:
+        for field_name in [
+            "action_freq",
+            "max_steps",
+            "frame_stacks",
+            "screen_size",
+            "obs_components",
+        ]:
             print(f"  {field_name}: {getattr(config, field_name)}")
         print()
 
