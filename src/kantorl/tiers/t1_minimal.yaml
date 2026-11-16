@@ -1,0 +1,36 @@
+# Tier 1 -- pixels plus what a player can read off the HUD.
+#
+# Party HP is the one progress-relevant number that is continuously visible in
+# normal play, so exposing it is barely a prior. Everything stronger is
+# removed: no 2,560-bit event scoreboard, no exploration map, no badge flags,
+# no action history.
+#
+# Progress is still communicated through the default reward, but the policy
+# has to perceive the cause itself. This is the tier that answers the real
+# question: does the agent play the game, or does it read the answer sheet?
+name: t1_minimal
+
+description: >
+  Pixels plus party HP, with the default rewarded-progress signal. Removes the
+  event-flag and map oracles while holding reward and horizon identical to T2.
+
+config:
+  obs_components: [screens, health]
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 163840
+
+  # Identical to T2 so the observation is the only changed axis.
+  reward_scale: 0.5
+  explore_weight: 0.3
+
+  gamma: 0.995
+  n_envs: 8
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 42

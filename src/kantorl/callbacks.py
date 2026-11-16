@@ -47,9 +47,8 @@ import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
 if TYPE_CHECKING:
-    from stable_baselines3.common.vec_env import VecNormalize
-
     import wandb as wandb_mod
+    from stable_baselines3.common.vec_env import VecNormalize
 
 
 # =============================================================================

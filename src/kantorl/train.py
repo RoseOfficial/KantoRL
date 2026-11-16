@@ -228,6 +228,95 @@ def create_lstm_policy_kwargs() -> dict:
 
 
 # =============================================================================
+# CONFIGURATION RESOLUTION
+# =============================================================================
+
+
+def resolve_config(
+    *,
+    rom_path: str,
+    session_path: str | Path,
+    n_envs: int | None,
+    enable_streaming: bool,
+    stream_username: str,
+    stream_color: str,
+    stream_sprite_id: int,
+    use_curriculum: bool,
+    enable_wandb: bool,
+    wandb_project: str,
+    wandb_entity: str | None,
+    wandb_group: str | None,
+    use_agent: bool,
+    obs_components: tuple[str, ...] | None,
+    base_config: KantoConfig | None,
+) -> KantoConfig:
+    """Build the effective configuration for a run.
+
+    Precedence, from strongest to weakest:
+
+    1. Explicit paths (``rom_path``, ``session_path``) -- a tier file cannot
+       know where the ROM lives on this machine.
+    2. ``base_config`` (a tier) for environment, reward and PPO settings.
+    3. The scalar arguments, which are the CLI defaults for a plain run.
+
+    Feature switches (streaming, curriculum, agent, wandb) are OR-ed with the
+    base config: the CLI can turn a feature on that a tier left off, but the
+    CLI's ``False`` default never silently disables something a tier enabled.
+
+    ``n_envs=None`` means "whatever the config or base config says".
+
+    Returns:
+        A validated :class:`KantoConfig`.
+    """
+    session_path = Path(session_path)
+
+    if base_config is None:
+        return KantoConfig(
+            rom_path=rom_path,
+            session_path=session_path,
+            n_envs=n_envs or 16,
+            enable_streaming=enable_streaming,
+            stream_username=stream_username,
+            stream_color=stream_color,
+            stream_sprite_id=stream_sprite_id,
+            enable_curriculum=use_curriculum,
+            enable_agent=use_agent,
+            enable_wandb=enable_wandb,
+            wandb_project=wandb_project,
+            wandb_entity=wandb_entity,
+            wandb_group=wandb_group,
+            obs_components=(
+                tuple(obs_components)
+                if obs_components is not None
+                else DEFAULT_OBS_COMPONENTS
+            ),
+        )
+
+    config = base_config
+    config.rom_path = str(rom_path)
+    config.session_path = session_path
+
+    # Streaming coordinates are host-specific, so the CLI wins there.
+    config.stream_username = stream_username
+    config.stream_color = stream_color
+    config.stream_sprite_id = stream_sprite_id
+
+    # Features can only be added by the CLI, never removed.
+    config.enable_streaming = config.enable_streaming or enable_streaming
+    config.enable_curriculum = config.enable_curriculum or use_curriculum
+    config.enable_agent = config.enable_agent or use_agent
+    config.enable_wandb = config.enable_wandb or enable_wandb
+
+    if n_envs is not None:
+        config.n_envs = n_envs
+
+    if obs_components is not None:
+        config.obs_components = tuple(obs_components)
+
+    return config
+
+
+# =============================================================================
 # MAIN TRAINING FUNCTION
 # =============================================================================
 
@@ -236,7 +325,7 @@ def train(
     rom_path: str,
     session_path: str = "runs",
     total_timesteps: int = 10_000_000,
-    n_envs: int = 16,
+    n_envs: int | None = None,
     resume: bool = True,
     reward_fn: str = "default",
     seed: int = 42,
@@ -251,6 +340,7 @@ def train(
     wandb_group: str | None = None,
     use_agent: bool = False,
     obs_components: tuple[str, ...] | None = None,
+    base_config: KantoConfig | None = None,
 ) -> None:
     """
     Run PPO training on Pokemon Red.
@@ -308,6 +398,11 @@ def train(
         obs_components: Observation components exposed to the policy. None uses
                        the legacy seven-component observation. Pass a subset to
                        run an ablation tier, e.g. ``("screens",)`` for pixels only.
+        base_config: Pre-built configuration, typically from a tier file. When
+                    given, its environment, reward and PPO settings win over the
+                    scalar arguments above; the arguments still supply the ROM,
+                    session directory, and any flags that turn features on.
+                    ``n_envs=None`` means "use ``base_config.n_envs``".
 
     Side Effects:
         - Creates session_path directory if it doesn't exist
@@ -345,7 +440,7 @@ def train(
     # -------------------------------------------------------------------------
     # Create configuration object with all settings
     # This bundles hyperparameters and paths for easy passing to components
-    config = KantoConfig(
+    config = resolve_config(
         rom_path=rom_path,
         session_path=session_path,
         n_envs=n_envs,
@@ -353,18 +448,24 @@ def train(
         stream_username=stream_username,
         stream_color=stream_color,
         stream_sprite_id=stream_sprite_id,
-        enable_curriculum=use_curriculum,
-        enable_agent=use_agent,
+        use_curriculum=use_curriculum,
         enable_wandb=enable_wandb,
         wandb_project=wandb_project,
         wandb_entity=wandb_entity,
         wandb_group=wandb_group,
-        obs_components=(
-            tuple(obs_components)
-            if obs_components is not None
-            else DEFAULT_OBS_COMPONENTS
-        ),
+        use_agent=use_agent,
+        obs_components=obs_components,
+        base_config=base_config,
     )
+
+    # The config is the single source of truth from here on: a tier file can
+    # turn curriculum, the agent module or streaming on, and the loop below
+    # reads those decisions back instead of the scalar defaults.
+    n_envs = config.n_envs
+    use_curriculum = config.enable_curriculum
+    use_agent = config.enable_agent
+    enable_streaming = config.enable_streaming
+    enable_wandb = config.enable_wandb
 
     # -------------------------------------------------------------------------
     # Wandb Initialization (optional)

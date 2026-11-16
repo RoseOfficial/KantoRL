@@ -44,7 +44,7 @@ class ObsContext:
         max_hp: Total maximum HP across the party.
     """
 
-    pyboy: "PyBoy"
+    pyboy: PyBoy
     frame_stack: np.ndarray | None = None
     explore_map: np.ndarray | None = None
     recent_actions: np.ndarray | None = None

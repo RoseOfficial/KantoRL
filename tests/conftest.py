@@ -9,10 +9,10 @@ Fixtures:
     default_config: Default KantoConfig instance
     mock_env: KantoRedEnv with mocked PyBoy
 """
-import numpy as np
-import pytest
 from unittest.mock import MagicMock, Mock, patch
 
+import numpy as np
+import pytest
 
 # =============================================================================
 # PYBOY MOCKING FIXTURES

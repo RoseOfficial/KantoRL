@@ -71,6 +71,9 @@ src/kantorl/
 ├── memory.py      # Documented memory reading
 ├── rewards.py     # Protocol-based reward system
 ├── obs/           # Composable observation producers
+├── tiers/         # Named experiment definitions (YAML)
+├── checkpoints.py # PPO / RecurrentPPO loading + tier inference
+├── milestones.py  # First-step milestone evaluation
 ├── env.py         # Main Gymnasium environment
 ├── train.py       # PPO training script
 ├── callbacks.py   # Training callbacks
@@ -111,6 +114,65 @@ env = KantoRedEnv(config=config)
 
 Evaluation reconstructs the tier from the checkpoint's observation space, so a
 pixels-only model loads without a shape mismatch.
+
+## Tiers
+
+A tier is a complete experiment definition: observation components, reward,
+horizon and PPO settings. Tiers are ordered by how much hand-authored game
+knowledge they assume, not by how well they score.
+
+```bash
+kantorl tier list
+kantorl tier run t0_pure pokemon_red.gb --session runs/t0
+```
+
+| Tier | Observation | Reward | Assumes |
+|---|---|---|---|
+| `t0_pure` | `screens` | coordinate novelty | action set + frame rate |
+| `t1_minimal` | `screens`, `health` | default (progress shaped) | pixels + visible HP |
+| `t2_pragmatic` | all seven | default (progress shaped) | RAM progress oracles |
+
+T0 and T1 and T2 hold `max_steps`, `frame_stacks`, `screen_size`, reward scale
+and `gamma` identical. The pairwise difference is therefore the observation,
+which is what makes the comparison an ablation rather than an anecdote.
+Curriculum is off in all three because it changes *where episodes start*, a
+separate axis; copy a tier file and set `enable_curriculum: true` to study it.
+
+Tier definitions live in `src/kantorl/tiers/*.yaml`. Unknown keys are rejected
+so a typo cannot silently change what you measured.
+
+## Milestone Evaluation
+
+Reward curves say what the reward function paid for. Milestones say when the
+agent first reached something real in the game.
+
+```bash
+kantorl milestones runs/t0/checkpoints/model_1000000.zip pokemon_red.gb \
+    --seeds 0 1 2 --budget 163840 --out runs/eval/t0
+```
+
+Every run uses the same seeds and step budget, so reports from different
+checkpoints line up. For each `(seed, episode, milestone)` the harness records
+the first step at which the milestone was reached:
+
+- `badge:N` — the Nth gym badge
+- `event:I` — a curated story event bit (`data/events.json`)
+- `map:M` — first visit to map `M`
+
+Milestones are read from RAM **for evaluation only** and never fed to the
+policy, so a pixels-only tier and a RAM-rich tier are measured by the same
+ruler. Output:
+
+- `milestones.json` — full report, episodes, catalog and summary
+- `milestones_episodes.csv` — long format, one row per reached milestone
+- `milestones_summary.csv` — reach rate and median first step per milestone
+
+A milestone that was never reached is reported with `reach_rate: 0` and a null
+median step, which is deliberately distinct from "reached at step 0".
+
+Checkpoints are self-describing: the loader reads the policy class from the
+archive, so PPO and RecurrentPPO both work, and the observation tier, frame
+stack and screen size are recovered from the recorded observation space.
 
 ## Action Space
 

@@ -1,0 +1,40 @@
+# Tier 0 -- pixels and generic novelty only.
+#
+# The policy sees downscaled frames and nothing else. The reward is coordinate
+# novelty: a generic "you have not been here before" signal that assumes
+# nothing about Pokemon. No event flags, no badges, no exploration map, no
+# action history.
+#
+# This tier is expected to fail, and that is the point. If it cannot leave the
+# starting room, the failure marks where learning collapses once game-specific
+# priors are removed. If it does make progress, every prior above it is
+# optional.
+name: t0_pure
+
+description: >
+  Pixels only, paid for visiting new coordinates. Closest to tabula rasa:
+  the only game knowledge left is the action set and the frame rate.
+
+config:
+  obs_components: [screens]
+  # Frame stack and screen size are held constant across tiers so the only
+  # axis that changes is *which components* exist.
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+
+  # Same episode budget as the other tiers so horizon is not a confound.
+  max_steps: 163840
+
+  # ExplorationReward: +0.1 per new (map, x, y), +1.0 per new map.
+  reward_scale: 1.0
+
+  gamma: 0.995
+  n_envs: 8
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: exploration
+  seed: 42

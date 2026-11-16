@@ -59,13 +59,15 @@ Dependencies:
 """
 
 import numpy as np
-from gymnasium import spaces
-from stable_baselines3 import PPO
 
+from kantorl.checkpoints import (
+    assert_observation_compatible,
+    env_kwargs_from_model,
+    is_recurrent,
+    load_model,
+)
 from kantorl.config import KantoConfig
 from kantorl.env import KantoRedEnv
-from kantorl.obs import DEFAULT_OBS_COMPONENTS, OBS_COMPONENTS
-
 
 # =============================================================================
 # EVALUATION FUNCTION
@@ -145,21 +147,15 @@ def evaluate(
     # -------------------------------------------------------------------------
     # Model Loading
     # -------------------------------------------------------------------------
-    # Load the trained PPO model from the checkpoint file
-    # The checkpoint contains the policy network weights, optimizer state,
-    # and training statistics (though we only need the policy for evaluation)
-    model = PPO.load(checkpoint_path)
+    # Handles both PPO and RecurrentPPO checkpoints; the class is read from the
+    # checkpoint's metadata rather than assumed from the file extension.
+    model = load_model(checkpoint_path)
+    recurrent = is_recurrent(model)
 
-    # Reconstruct the observation tier from the checkpoint. Checkpoints trained
-    # on a subset (e.g. screens only) declare a smaller Dict space; loading them
-    # into the default environment would fail with an observation-shape mismatch.
-    obs_keys: tuple[str, ...] = DEFAULT_OBS_COMPONENTS
-    if isinstance(model.observation_space, spaces.Dict):
-        known = tuple(
-            key for key in model.observation_space.spaces if key in OBS_COMPONENTS
-        )
-        if known:
-            obs_keys = known
+    # Reconstruct the observation tier (and frame stack / screen size) from the
+    # checkpoint. A pixels-only or 4-frame-stack model would otherwise crash on
+    # the first forward pass with a shape mismatch.
+    inferred = env_kwargs_from_model(model)
 
     # -------------------------------------------------------------------------
     # Environment Setup
@@ -168,7 +164,7 @@ def evaluate(
     config = KantoConfig(
         rom_path=rom_path,
         max_steps=max_steps,  # Override default to use evaluation max_steps
-        obs_components=obs_keys,
+        **inferred,
     )
 
     # Set render mode based on user preference
@@ -178,6 +174,9 @@ def evaluate(
 
     # Create a single evaluation environment (no parallelism needed)
     env = KantoRedEnv(config=config, render_mode=render_mode)
+
+    # Fail with a readable message instead of a policy-internal shape error
+    assert_observation_compatible(model, env)
 
     # -------------------------------------------------------------------------
     # Metric Collection Setup
@@ -205,12 +204,25 @@ def evaluate(
         ep_length = 0  # Steps taken this episode
         max_tiles = 0  # Peak exploration tiles seen
 
+        # LSTM bookkeeping for recurrent policies. PPO ignores these.
+        lstm_state = None
+        episode_start = np.ones((1,), dtype=bool)
+
         # Run episode until terminated or truncated
         while not done:
             # Get action from the trained policy
             # deterministic=True means we use the argmax action (no sampling)
             # This gives us the agent's "best guess" action, not exploration
-            action, _ = model.predict(obs, deterministic=True)
+            if recurrent:
+                action, lstm_state = model.predict(
+                    obs,
+                    state=lstm_state,
+                    episode_start=episode_start,
+                    deterministic=True,
+                )
+                episode_start = np.zeros((1,), dtype=bool)
+            else:
+                action, _ = model.predict(obs, deterministic=True)
 
             # Execute action in environment
             # Returns: new observation, reward, terminated flag, truncated flag, info dict

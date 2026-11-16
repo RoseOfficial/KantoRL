@@ -1,0 +1,45 @@
+# Tier 2 -- the full RAM-rich observation.
+#
+# Seven components: screens, party HP, Fourier-encoded levels, badge flags,
+# 2,560 event flags, the 48x48 exploration map, and the last three actions.
+# Reward and horizon are identical to T1, so the only difference between the
+# two tiers is which observation components exist. That is what makes the
+# comparison an ablation rather than a story.
+#
+# Curriculum training is deliberately off here. Curriculum changes *where
+# episodes start*, which is a separate axis from *what the policy sees*;
+# enabling both at once would leave you unable to attribute a difference to
+# either. Copy this file and set enable_curriculum: true to study it alone.
+name: t2_pragmatic
+
+description: >
+  Full RAM-rich observation with the default reward. The reference point for
+  measuring what each removed observation prior costs.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 163840
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+
+  gamma: 0.995
+  n_envs: 8
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 42

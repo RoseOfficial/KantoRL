@@ -277,6 +277,104 @@ def main() -> int:
     )
 
     # -------------------------------------------------------------------------
+    # Milestones Command
+    # -------------------------------------------------------------------------
+    # Measure when a checkpoint first reaches game milestones. Same seeds and
+    # step budget across checkpoints, so tiers are directly comparable.
+    mil_parser = subparsers.add_parser(
+        "milestones",
+        help="Record first-step timestamps for game milestones",
+    )
+
+    mil_parser.add_argument(
+        "checkpoint",
+        help="Path to model checkpoint (.zip, PPO or RecurrentPPO)",
+    )
+    mil_parser.add_argument(
+        "rom_path",
+        help="Path to Pokemon Red ROM file (.gb)",
+    )
+    mil_parser.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=[0, 1, 2],
+        help="Episode seeds; identical seeds make checkpoints comparable "
+        "(default: 0 1 2)",
+    )
+    mil_parser.add_argument(
+        "--budget",
+        type=int,
+        default=163_840,
+        help="Max environment steps per episode (default: 163840)",
+    )
+    mil_parser.add_argument(
+        "--out",
+        default=None,
+        help="Output directory (default: runs/eval/<checkpoint name>)",
+    )
+    mil_parser.add_argument(
+        "--stochastic",
+        action="store_true",
+        help="Sample actions instead of using the argmax policy",
+    )
+    mil_parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Render gameplay (opens visualization window)",
+    )
+    mil_parser.add_argument(
+        "--action-freq",
+        type=int,
+        default=None,
+        help="Override frames per action (must match training)",
+    )
+
+    # -------------------------------------------------------------------------
+    # Tier Command
+    # -------------------------------------------------------------------------
+    # Named experiment tiers: pixels-only through the full RAM-rich system.
+    tier_parser = subparsers.add_parser(
+        "tier",
+        help="List or run named experiment tiers",
+    )
+    tier_subparsers = tier_parser.add_subparsers(
+        dest="tier_command",
+        help="Tier operations",
+    )
+
+    tier_subparsers.add_parser("list", help="List bundled tiers")
+
+    tier_run_parser = tier_subparsers.add_parser(
+        "run",
+        help="Train using a tier definition",
+    )
+    tier_run_parser.add_argument(
+        "tier",
+        help="Tier name (t0_pure, t1_minimal, t2_pragmatic) or path to a tier YAML",
+    )
+    tier_run_parser.add_argument(
+        "rom_path",
+        help="Path to Pokemon Red ROM file (.gb)",
+    )
+    tier_run_parser.add_argument(
+        "--session", "-s",
+        default=None,
+        help="Session directory (default: runs/<tier name>)",
+    )
+    tier_run_parser.add_argument(
+        "--steps", "-n",
+        type=int,
+        default=None,
+        help="Override total training steps from the tier file",
+    )
+    tier_run_parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Start fresh, don't resume from checkpoint",
+    )
+
+    # -------------------------------------------------------------------------
     # Info Command
     # -------------------------------------------------------------------------
     # Display environment information
@@ -528,6 +626,87 @@ def main() -> int:
             render=args.render,
         )
         return 0  # Success
+
+    elif args.command == "milestones":
+        # ---------------------------------------------------------------------
+        # Milestones Command Handler
+        # ---------------------------------------------------------------------
+        # Fixed seeds + fixed budget, so reports from different tiers line up.
+        from pathlib import Path
+
+        from kantorl.config import KantoConfig
+        from kantorl.milestones import evaluate_milestones, write_report
+
+        base_config = KantoConfig(rom_path=args.rom_path)
+        if args.action_freq is not None:
+            base_config.action_freq = args.action_freq
+
+        report = evaluate_milestones(
+            checkpoint_path=args.checkpoint,
+            rom_path=args.rom_path,
+            seeds=tuple(args.seeds),
+            budget=args.budget,
+            deterministic=not args.stochastic,
+            render=args.render,
+            base_config=base_config,
+        )
+
+        out_dir = args.out or str(
+            Path("runs") / "eval" / Path(args.checkpoint).stem
+        )
+        paths = write_report(report, out_dir)
+
+        print(f"\nTier: {'+'.join(report.obs_components)}")
+        print(report.format_summary())
+        print("\nWrote:")
+        for kind, path in paths.items():
+            print(f"  {kind}: {path}")
+        return 0  # Success
+
+    elif args.command == "tier":
+        # ---------------------------------------------------------------------
+        # Tier Command Handler
+        # ---------------------------------------------------------------------
+        from kantorl.tiers import available_tier_names, load_tier
+
+        if args.tier_command == "list":
+            for name in available_tier_names():
+                tier = load_tier(name)
+                print(f"{tier.name}")
+                print(f"  obs:    {', '.join(tier.config.get('obs_components', []))}")
+                print(f"  reward: {tier.train.get('reward_fn', 'default')}")
+                print(f"  steps:  {tier.train.get('total_timesteps', 0):,}")
+                if tier.description:
+                    print(f"  {tier.description}")
+                print()
+            return 0
+
+        if args.tier_command == "run":
+            from kantorl.train import train
+
+            tier = load_tier(args.tier)
+            session = args.session or f"runs/{tier.name}"
+            config = tier.to_config(args.rom_path, session)
+            kwargs = tier.train_kwargs()
+
+            print(f"Tier: {tier.name}")
+            print(f"  obs:  {', '.join(config.obs_components)}")
+            print(f"  session: {session}")
+
+            train(
+                rom_path=args.rom_path,
+                session_path=session,
+                total_timesteps=args.steps or kwargs.get("total_timesteps", 10_000_000),
+                n_envs=None,  # use the tier's config.n_envs
+                resume=not args.no_resume,
+                reward_fn=kwargs.get("reward_fn", "default"),
+                seed=kwargs.get("seed", 42),
+                base_config=config,
+            )
+            return 0
+
+        tier_parser.print_help()
+        return 1
 
     elif args.command == "info":
         # ---------------------------------------------------------------------

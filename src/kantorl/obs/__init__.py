@@ -15,7 +15,8 @@ it here; the environment does not need to change.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from kantorl.obs.base import ObsContext, ObsProducer
 from kantorl.obs.producers import (
