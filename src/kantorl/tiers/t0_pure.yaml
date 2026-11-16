@@ -23,8 +23,14 @@ config:
   screen_size: [72, 80]
   action_freq: 24
 
-  # Same episode budget as the other tiers so horizon is not a confound.
-  max_steps: 163840
+  # Episode length, held equal across tiers so horizon is not a confound.
+  #
+  # 12,288 steps is ~1.4 in-game hours. The horizon has to fit inside the
+  # training budget: at 2M steps across 32 envs each env only gets ~62k steps,
+  # so a 163,840-step episode means no episode ever ends, novelty rewards never
+  # refresh, and the signal is flat for ~62k steps. Measured: that configuration
+  # trained three policies that were worse than uniform random.
+  max_steps: 12288
 
   # ExplorationReward: +0.1 per new (map, x, y), +1.0 per new map.
   reward_scale: 1.0
