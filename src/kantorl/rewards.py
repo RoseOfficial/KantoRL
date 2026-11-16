@@ -485,6 +485,12 @@ class DefaultReward:
     # Badges only reward when count increases (delta-based)
     max_badges: int = 0
 
+    # Whether the delta baselines have been taken for this episode.
+    # The first step of an episode must not pay for progress that is already
+    # true: a new game sets a block of event flags at initialization, and a
+    # save state can start with badges and events already earned.
+    baselined: bool = False
+
     # Cumulative HP restoration this episode (for logging)
     # Tracks total healing to monitor Pokemon Center usage
     total_healing: float = 0.0
@@ -543,6 +549,17 @@ class DefaultReward:
             "interact": 0.0,    # Pressed A somewhere new
             "stuck": 0.0,       # Penalty for no progress
         }
+
+        # Baseline the delta counters when the game first reports any progress.
+        # A new game sits at zero events for the first few steps (still in the
+        # intro) and then sets a block of flags at once, so keying on the first
+        # step would capture zero and pay +28 for the initialization block. The
+        # first non-zero count is that initialization, never a real achievement.
+        if not self.baselined:
+            if state.event_count > 0 or state.badges > 0:
+                self.max_event_count = state.event_count
+                self.max_badges = state.badges
+                self.baselined = True
 
         # ---------------------------------------------------------------------
         # Event Progress Reward
@@ -672,6 +689,7 @@ class DefaultReward:
         self.interacted_coords.clear()
         self.max_event_count = 0
         self.max_badges = 0
+        self.baselined = False
         self.total_healing = 0.0
         self.steps_without_progress = 0
         self.last_rewards = {}

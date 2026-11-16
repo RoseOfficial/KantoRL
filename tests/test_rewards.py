@@ -114,3 +114,45 @@ def test_create_reward_forwards_weights_for_both_rewards():
     assert default.interact_weight == 0.25
     assert default.stuck_penalty == 0.1
     assert exploration.interact_weight == 0.25
+
+
+# =============================================================================
+# DELTA BASELINE
+# =============================================================================
+
+
+def test_preexisting_events_do_not_pay():
+    """A new game sets ~8 flags at init; they are not progress."""
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, event_count=8), None, action=0)
+
+    assert reward.last_rewards["event"] == 0.0
+
+
+def test_events_earned_after_the_baseline_pay():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, event_count=8), None, action=0)
+    reward.calculate(GameState(map_id=0, x=0, y=0, event_count=9), None, action=0)
+
+    assert reward.last_rewards["event"] == pytest.approx(8.0)
+
+
+def test_preexisting_badges_do_not_pay():
+    """A save state can start with badges already earned."""
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, badges=3), None, action=0)
+
+    assert reward.last_rewards["badge"] == 0.0
+
+
+def test_reset_rebaselines_for_the_next_episode():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, event_count=8), None, action=0)
+    reward.reset()
+    reward.calculate(GameState(map_id=0, x=0, y=0, event_count=8), None, action=0)
+
+    assert reward.last_rewards["event"] == 0.0
