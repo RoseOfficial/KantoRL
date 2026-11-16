@@ -10,10 +10,9 @@ import json
 import zipfile
 from pathlib import Path
 
+import gymnasium as gym
 import numpy as np
 import pytest
-
-import gymnasium as gym
 
 from kantorl.checkpoints import (
     env_kwargs_from_model,
@@ -35,7 +34,6 @@ from kantorl.milestones import (
     write_summary_csv,
 )
 
-
 # =============================================================================
 # CHECKPOINT METADATA
 # =============================================================================
@@ -50,7 +48,8 @@ def make_checkpoint(path: Path, policy_class: str) -> Path:
 
 
 def test_reads_metadata_and_detects_ppo(tmp_path: Path) -> None:
-    path = make_checkpoint(tmp_path / "ppo.zip", "stable_baselines3.common.policies.ActorCriticPolicy")
+    policy_class = "stable_baselines3.common.policies.ActorCriticPolicy"
+    path = make_checkpoint(tmp_path / "ppo.zip", policy_class)
     assert read_checkpoint_metadata(path)["policy_class"].startswith("stable_baselines3")
     assert is_recurrent_checkpoint(path) is False
 
