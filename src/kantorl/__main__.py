@@ -383,6 +383,15 @@ def main() -> int:
         action="store_true",
         help="Disable the progress bar (faster on Windows consoles)",
     )
+    tier_run_parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help=(
+            "Override the training seed. Training is not reproducible across "
+            "runs, so measuring a tier means several seeds, not one."
+        ),
+    )
 
     # -------------------------------------------------------------------------
     # Info Command
@@ -711,7 +720,7 @@ def main() -> int:
                 n_envs=None,  # use the tier's config.n_envs
                 resume=not args.no_resume,
                 reward_fn=kwargs.get("reward_fn", "default"),
-                seed=kwargs.get("seed", 42),
+                seed=args.seed if args.seed is not None else kwargs.get("seed", 42),
                 base_config=config,
                 show_progress=not args.no_progress,
             )
