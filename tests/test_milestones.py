@@ -133,29 +133,44 @@ def test_event_and_map_labels_are_human_readable() -> None:
 def test_tracker_records_first_step_only() -> None:
     tracker = MilestoneTracker()
 
-    tracker.update({"step": 0, "map_id": 0, "badges": 0, "new_event_indices": []})
+    tracker.update({"step": 0, "map_id": 0, "badges": 0, "events": 0, "new_event_indices": []})
     assert tracker.first_steps == {"map:0": 0}
 
     # Same map again: no duplicate record.
-    tracker.update({"step": 10, "map_id": 0, "badges": 0, "new_event_indices": []})
+    tracker.update({"step": 10, "map_id": 0, "badges": 0, "events": 0, "new_event_indices": []})
     assert tracker.first_steps == {"map:0": 0}
 
-    tracker.update({"step": 20, "map_id": 0, "badges": 1, "new_event_indices": [3]})
+    # The new game's initial block of flags is a baseline, not an achievement.
+    tracker.update(
+        {"step": 12, "map_id": 0, "badges": 0, "events": 8, "new_event_indices": INIT_EVENTS}
+    )
+    assert "map:0" in tracker.first_steps
+    assert not [key for key in tracker.first_steps if key.startswith("event:")]
+
+    tracker.update({"step": 20, "map_id": 0, "badges": 1, "events": 9, "new_event_indices": [3]})
     assert tracker.first_steps["badge:1"] == 20
     assert tracker.first_steps["event:3"] == 20
 
     # Re-entering the badge/event must not overwrite the timestamp.
-    tracker.update({"step": 99, "map_id": 0, "badges": 1, "new_event_indices": [3]})
+    tracker.update({"step": 99, "map_id": 0, "badges": 1, "events": 9, "new_event_indices": [3]})
     assert tracker.first_steps["badge:1"] == 20
     assert tracker.first_steps["event:3"] == 20
 
 
 def test_tracker_emits_hits_only_once() -> None:
     tracker = MilestoneTracker()
-    first = tracker.update({"step": 5, "map_id": 12, "badges": 0, "new_event_indices": [1, 2]})
-    assert {hit.milestone.key for hit in first} == {"map:12", "event:1", "event:2"}
+    tracker.update(
+        {"step": 4, "map_id": 12, "badges": 0, "events": 8, "new_event_indices": INIT_EVENTS}
+    )
 
-    second = tracker.update({"step": 6, "map_id": 12, "badges": 0, "new_event_indices": [1]})
+    first = tracker.update(
+        {"step": 5, "map_id": 12, "badges": 0, "events": 10, "new_event_indices": [1, 2]}
+    )
+    assert {hit.milestone.key for hit in first} == {"event:1", "event:2"}
+
+    second = tracker.update(
+        {"step": 6, "map_id": 12, "badges": 0, "events": 10, "new_event_indices": [1]}
+    )
     assert second == []
 
 
@@ -409,3 +424,54 @@ def test_stochastic_eval_is_not_noisy():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         warn_if_deterministic_seeds(False, (0, 1, 2))
+
+
+# =============================================================================
+# GAME-INITIALIZATION EVENT FLAGS
+# =============================================================================
+
+# Observed together on a fresh new game, before the player can act.
+INIT_EVENTS = [0, 25, 32, 33, 34, 35, 39, 960]
+
+
+def test_initialization_batch_is_not_counted_as_achievements():
+    """A new game sets a block of flags at once; those are not progress."""
+    tracker = MilestoneTracker()
+
+    tracker.update(
+        {
+            "step": 16,
+            "map_id": 0,
+            "badges": 0,
+            "events": 8,
+            "new_event_indices": INIT_EVENTS,
+        }
+    )
+
+    assert not [k for k in tracker.first_steps if k.startswith("event:")]
+    # The map in the same step is still recorded; only events are baselined.
+    assert tracker.first_steps == {"map:0": 16}
+
+
+def test_real_event_after_initialization_is_recorded():
+    tracker = MilestoneTracker()
+
+    tracker.update(
+        {"step": 16, "map_id": 0, "badges": 0, "events": 8, "new_event_indices": INIT_EVENTS}
+    )
+    tracker.update({"step": 900, "map_id": 12, "badges": 0, "events": 9, "new_event_indices": [50]})
+
+    assert tracker.first_steps["event:50"] == 900
+
+
+def test_baseline_is_rearmed_by_reset():
+    """Each episode starts a new game, so the next batch is a baseline again."""
+    tracker = MilestoneTracker()
+    tracker.update(
+        {"step": 16, "map_id": 0, "badges": 0, "events": 8, "new_event_indices": INIT_EVENTS}
+    )
+
+    tracker.reset()
+    tracker.update({"step": 16, "map_id": 0, "badges": 0, "events": 8, "new_event_indices": [50]})
+
+    assert not [k for k in tracker.first_steps if k.startswith("event:")]

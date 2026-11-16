@@ -183,11 +183,13 @@ class MilestoneTracker:
     def __init__(self) -> None:
         self._first_step: dict[str, int] = {}
         self._catalog: dict[str, Milestone] = {}
+        self._events_baselined = False
 
     def reset(self) -> None:
         """Clear per-episode tracking (catalog included)."""
         self._first_step.clear()
         self._catalog.clear()
+        self._events_baselined = False
 
     @property
     def first_steps(self) -> dict[str, int]:
@@ -225,8 +227,19 @@ class MilestoneTracker:
             if hit is not None:
                 hits.append(hit)
 
-        for index in info.get("new_event_indices") or ():
-            hit = self._record(event_milestone(int(index)), step)
+        event_indices = [int(i) for i in (info.get("new_event_indices") or ())]
+        event_count = int(info.get("events", 0) or 0)
+        if not self._events_baselined and event_count > 0:
+            # Starting a new game sets a block of flags at once (0, 25, 32, 33,
+            # 34, 35, 39 and 960 on Red UE). They arrive before the player can
+            # act and are not achievements, but they look exactly like one to a
+            # difference detector. The first step that has any flags set is the
+            # initial state, so nothing in it counts as progress.
+            self._events_baselined = True
+            event_indices = []
+
+        for index in event_indices:
+            hit = self._record(event_milestone(index), step)
             if hit is not None:
                 hits.append(hit)
 

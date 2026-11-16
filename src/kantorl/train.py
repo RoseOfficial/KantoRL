@@ -627,6 +627,9 @@ def train(
                 policy_kwargs=create_lstm_policy_kwargs(),
                 verbose=1,
                 seed=seed,
+                # Without this SB3 has no writer and every game/* metric the
+                # callbacks record is printed but never persisted.
+                tensorboard_log=str(session_path / "tensorboard"),
             )
 
             # Write flag file so we know to use RecurrentPPO.load() on resume
@@ -658,6 +661,9 @@ def train(
                 verbose=1,  # Print training info
                 # Reproducibility
                 seed=seed,
+                # Without this SB3 has no writer and every game/* metric the
+                # callbacks record is printed but never persisted.
+                tensorboard_log=str(session_path / "tensorboard"),
             )
 
         remaining_steps = total_timesteps
