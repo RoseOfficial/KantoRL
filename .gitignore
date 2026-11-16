@@ -52,6 +52,9 @@ htmlcov/
 # Profiling
 *.prof
 
+# Machine-specific throughput measurements
+benchmarks/*.json
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -64,6 +67,9 @@ wandb/
 *.zip
 test_*/
 test_*
+# ...but test modules are source, not artifacts. Without this exception a new
+# tests/test_*.py is silently never committed.
+!tests/test_*.py
 
 # ROM and save files (never commit)
 *.gb
