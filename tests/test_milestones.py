@@ -7,6 +7,7 @@ environment's info dict, and checkpoint metadata is read from a synthetic zip.
 from __future__ import annotations
 
 import json
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from kantorl.milestones import (
     badge_milestone,
     event_milestone,
     map_milestone,
+    warn_if_deterministic_seeds,
     write_episodes_csv,
     write_report_json,
     write_summary_csv,
@@ -384,3 +386,26 @@ def test_sb3_checkpoint_round_trip_preserves_tier_and_shapes(tmp_path: Path) -> 
         "frame_stacks": 4,
         "screen_size": (36, 40),
     }
+
+
+# =============================================================================
+# DETERMINISTIC-SEED WARNING
+# =============================================================================
+
+
+def test_warns_when_deterministic_eval_gets_several_seeds():
+    """Argmax on a deterministic emulator makes extra seeds copies, not samples."""
+    with pytest.warns(UserWarning, match="replay the same episode"):
+        warn_if_deterministic_seeds(True, (0, 1))
+
+
+def test_single_seed_is_not_noisy():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warn_if_deterministic_seeds(True, (0,))
+
+
+def test_stochastic_eval_is_not_noisy():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warn_if_deterministic_seeds(False, (0, 1, 2))

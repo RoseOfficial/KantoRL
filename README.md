@@ -228,7 +228,13 @@ kantorl milestones runs/t0/checkpoints/model_1000000.zip pokemon_red.gb \
 ```
 
 Every run uses the same seeds and step budget, so reports from different
-checkpoints line up. For each `(seed, episode, milestone)` the harness records
+checkpoints line up.
+
+Note that `--seeds` is only replication under `--stochastic`. With the default
+deterministic (argmax) policy, the emulator is deterministic too, so every seed
+replays a byte-identical episode and the harness says so with a warning. Seed a
+real spread with `--stochastic`; use one seed when you want a single
+reproducible rollout. For each `(seed, episode, milestone)` the harness records
 the first step at which the milestone was reached:
 
 - `badge:N` — the Nth gym badge

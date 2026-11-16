@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import json
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +51,7 @@ __all__ = [
     "MilestoneTracker",
     "evaluate_milestones",
     "load_event_labels",
+    "warn_if_deterministic_seeds",
     "write_episodes_csv",
     "write_report",
     "write_report_json",
@@ -392,6 +394,23 @@ def _act(
     return action, state, episode_start
 
 
+def warn_if_deterministic_seeds(deterministic: bool, seeds: Sequence[int]) -> None:
+    """Warn when deterministic evaluation is asked for several seeds.
+
+    An argmax policy on a deterministic emulator from a fixed start state
+    produces byte-identical episodes, so N seeds are N copies of one run and
+    look like replication when they are not. Call before the eval loop.
+    """
+    if deterministic and len(seeds) > 1:
+        warnings.warn(
+            "deterministic=True makes every seed replay the same episode: the "
+            "policy is argmax and the emulator is deterministic. Seeds only "
+            "vary action sampling, so use --stochastic for a real spread.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+
 def evaluate_milestones(
     checkpoint_path: str | Path,
     rom_path: str | Path,
@@ -436,6 +455,8 @@ def evaluate_milestones(
         raise ValueError("seeds must contain at least one episode seed")
     if budget <= 0:
         raise ValueError(f"budget must be positive, got {budget}")
+    if deterministic and len(seeds) > 1:
+        warn_if_deterministic_seeds(deterministic, seeds)
 
     model = load_model(checkpoint_path)
 
