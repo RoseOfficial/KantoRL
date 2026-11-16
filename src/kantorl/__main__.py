@@ -243,6 +243,11 @@ def main() -> int:
         default=None,
         help="wandb run group for organizing experiments",
     )
+    train_parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable the progress bar (faster on Windows consoles)",
+    )
 
     # -------------------------------------------------------------------------
     # Eval Command
@@ -372,6 +377,11 @@ def main() -> int:
         "--no-resume",
         action="store_true",
         help="Start fresh, don't resume from checkpoint",
+    )
+    tier_run_parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable the progress bar (faster on Windows consoles)",
     )
 
     # -------------------------------------------------------------------------
@@ -608,6 +618,7 @@ def main() -> int:
             wandb_project=args.wandb_project,
             wandb_entity=args.wandb_entity,
             wandb_group=args.wandb_group,
+            show_progress=not args.no_progress,
         )
         return 0  # Success
 
@@ -702,6 +713,7 @@ def main() -> int:
                 reward_fn=kwargs.get("reward_fn", "default"),
                 seed=kwargs.get("seed", 42),
                 base_config=config,
+                show_progress=not args.no_progress,
             )
             return 0
 

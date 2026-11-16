@@ -11,6 +11,82 @@
 
 A minimal, educational RL environment for Pokemon Red. Simple enough for students and hobbyists to understand and modify.
 
+## Setup
+
+Verified on Windows with Python 3.13 and an 8-core/16-thread CPU.
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -e .
+```
+
+PyBoy ships SDL2 binaries in its wheel, so no separate emulator install is
+needed. A ROM is *not* included; put yours somewhere outside the repo (the
+`.gitignore` blocks `*.gb`, but a ROM should not live in a checkout at all) and
+pass the path to every command.
+
+Check that the ROM boots before spending time on training:
+
+```powershell
+.venv\Scripts\python -c "from pyboy import PyBoy; pb = PyBoy(r'C:\roms\Pokemon Red.gb', window='null'); print(pb.cartridge_title); pb.stop()"
+```
+
+Install the **CPU** build of PyTorch. `pip install torch` on Windows already
+gives you this, which is what you want: at this model size a GPU is *slower*
+(see [Throughput](#throughput)).
+
+## Throughput
+
+Two different numbers matter, and they disagree about the best configuration.
+
+**Environment ceiling.** With `scripts/bench_throughput.py` (real `SubprocVecEnv`,
+full observation, IPC included, no training loop):
+
+| envs | steps/s | per-env steps/s | scaling | RSS |
+|---:|---:|---:|---:|---:|
+| 1 | 292 | 292 | 1.00x | 0.4 GB |
+| 4 | 856 | 214 | 2.93x | 1.0 GB |
+| 8 | 1,393 | 174 | 4.77x | 2.1 GB |
+| 16 | 2,161 | 135 | 7.40x | 3.9 GB |
+| 20 | 1,942 | 97 | 6.65x | 4.9 GB |
+| 32 | 2,260 | 71 | 7.74x | 7.6 GB |
+
+One environment per hardware thread is where per-env throughput stops paying
+off. Memory is roughly 245 MB per environment.
+
+**Training throughput.** That ceiling is not what training achieves. SB3
+collects a rollout and then updates on the same CPU while every worker sits
+idle, so the number to optimize is `scripts/bench_train.py`, which times the two
+phases separately:
+
+| envs | rollout threads | update threads | steps/s |
+|---:|---:|---:|---:|
+| 16 | 16 | 16 | 563 |
+| 16 | 2 | 16 | 951 |
+| 32 | 2 | 16 | **1,121** |
+| 48 | 2 | 16 | 1,135 (regresses: memory pressure) |
+
+Two things drive the difference. The policy does one small forward pass per
+environment step, so a wide thread pool is pure overhead during rollout; the
+gradient update wants every core. `ThreadTuningCallback` retunes torch between
+the phases, and the extra envs fill the idle time during updates. Together they
+take the shipped configuration from 563 to about 1,121 steps/s — roughly 5 hours
+for a 20M-timestep run.
+
+Throughput is not constant: it starts near 2,000 steps/s and falls toward about
+1,000 as the agent reaches busier scenes, because emulation cost depends on what
+is on screen.
+
+```powershell
+.venv\Scripts\python scripts/bench_throughput.py "C:/roms/Pokemon Red.gb" --envs 1 2 4 8 16
+.venv\Scripts\python scripts/bench_train.py "C:/roms/Pokemon Red.gb" --sweep
+```
+
+Two things that sound like wins but are not: the rich progress bar costs
+nothing measurable (48.0s vs 48.4s for 40k steps), and moving the policy to CUDA
+made training 3x *slower* (292 steps/s) because per-step device sync dominates a
+small CNN.
+
 ## Quick Start
 
 ```bash

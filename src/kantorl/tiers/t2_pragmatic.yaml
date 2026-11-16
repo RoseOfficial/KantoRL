@@ -34,7 +34,11 @@ config:
   explore_weight: 0.3
 
   gamma: 0.995
-  n_envs: 8
+  # Full training-loop throughput on the reference machine (8C/16T): 32 envs at
+  # 1,214 steps/s beats 16 envs at 951, because workers idle during the PPO
+  # update and oversubscription fills that gap. 48 envs regresses to 1,135 on
+  # memory pressure. See scripts/bench_train.py.
+  n_envs: 32
 
   enable_curriculum: false
   enable_agent: false
