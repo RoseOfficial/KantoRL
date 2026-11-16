@@ -34,6 +34,7 @@ config:
 
   # ExplorationReward: +0.1 per new (map, x, y), +1.0 per new map.
   reward_scale: 1.0
+  interact_weight: 1.0
 
   gamma: 0.995
   # Full training-loop throughput on the reference machine (8C/16T): 32 envs at

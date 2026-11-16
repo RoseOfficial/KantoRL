@@ -35,6 +35,10 @@ config:
 
   reward_scale: 0.5
   explore_weight: 0.3
+  # Pay for pressing A somewhere new; without it A is strictly bad.
+  interact_weight: 1.0
+  # Off: the stuck penalty also fires during dialogue and menus.
+  stuck_penalty: 0.0
 
   gamma: 0.995
   # Full training-loop throughput on the reference machine (8C/16T): 32 envs at

@@ -195,6 +195,16 @@ class KantoConfig:
     # sparse event/badge rewards kick in
     explore_weight: float = 0.3
 
+    # Weight for the interaction-novelty reward (first A press at a position)
+    # Without it the A button is strictly bad under a movement reward: it opens
+    # dialogue, which freezes position and stops paying for new tiles, so the
+    # policy learns never to interact and never obtains a starter.
+    interact_weight: float = 1.0
+
+    # Weight for the stuck penalty. Defaults to 0: the penalty fires in any
+    # reward-free stretch, including the dialogue and menus that progress needs.
+    stuck_penalty: float = 0.0
+
     # =============================================================================
     # TRAINING HYPERPARAMETERS (PPO)
     # These values are tuned to match PokemonRedExperiments V2 for reproducibility
@@ -451,6 +461,18 @@ class KantoConfig:
             raise ValueError(
                 f"reward_scale should be in (0, 10], got {self.reward_scale}. "
                 "Zero or negative scaling would eliminate or invert rewards."
+            )
+
+        # Interaction and stuck weights multiply reward_scale, so a negative
+        # value would invert the intended incentive.
+        if self.interact_weight < 0:
+            raise ValueError(
+                f"interact_weight must be >= 0, got {self.interact_weight}. "
+                "A negative weight would punish pressing A."
+            )
+        if self.stuck_penalty < 0:
+            raise ValueError(
+                f"stuck_penalty must be >= 0, got {self.stuck_penalty}."
             )
 
         # Validate curriculum settings

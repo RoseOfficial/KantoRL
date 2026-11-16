@@ -80,6 +80,12 @@ from kantorl import memory
 # =============================================================================
 
 
+# Action index for the A button. Must match PRESS_ACTIONS in env.py.
+# Reward functions need this to pay for interaction: pressing A leaves no trace
+# in GameState until long after the fact, so a state-only reward cannot see it.
+ACTION_A = 5
+
+
 @dataclass
 class GameState:
     """
@@ -282,7 +288,12 @@ class RewardFunction(Protocol):
         - At runtime, no inheritance check is performed (duck typing)
     """
 
-    def calculate(self, state: GameState, prev_state: GameState | None) -> float:
+    def calculate(
+        self,
+        state: GameState,
+        prev_state: GameState | None,
+        action: int | None = None,
+    ) -> float:
         """
         Calculate the reward for transitioning to the current state.
 
@@ -294,6 +305,9 @@ class RewardFunction(Protocol):
             state: The current game state after the action was taken.
             prev_state: The previous game state before the action, or None
                        if this is the first step of an episode.
+            action: The action index that produced ``state``, or None when the
+                   caller does not track it. Rewards that pay for interacting
+                   need it: the effect of pressing A is otherwise invisible.
 
         Returns:
             A float reward value. Positive values encourage the behavior
@@ -436,6 +450,17 @@ class DefaultReward:
     # Higher values encourage more thorough map coverage
     explore_weight: float = 0.1
 
+    # Weight for the interaction-novelty reward (pressing A somewhere new).
+    # Without it the A button is strictly bad: it opens dialogue, which freezes
+    # position and stops paying explore reward, so the policy learns never to
+    # interact and never obtains a starter.
+    interact_weight: float = 1.0
+
+    # Weight for the stuck penalty. Defaults to 0 because the penalty fires in
+    # any reward-free stretch, which includes productive dialogue and menus --
+    # exactly the states the agent needs to spend time in.
+    stuck_penalty: float = 0.0
+
     # ===================
     # Episode Tracking
     # ===================
@@ -443,6 +468,10 @@ class DefaultReward:
     # Set of (map_id, x, y) coordinates visited this episode
     # Used for exploration rewards - only new coordinates give reward
     visited_coords: set = field(default_factory=set)
+
+    # Set of (map_id, x, y) coordinates where A has been pressed this episode
+    # Used for interaction novelty - only the first press per position pays
+    interacted_coords: set = field(default_factory=set)
 
     # Set of map_id values visited this episode
     # Used for map discovery rewards - entering new areas
@@ -472,21 +501,29 @@ class DefaultReward:
     # Used for detailed logging and debugging
     last_rewards: dict = field(default_factory=dict)
 
-    def calculate(self, state: GameState, prev_state: GameState | None) -> float:
+    def calculate(
+        self,
+        state: GameState,
+        prev_state: GameState | None,
+        action: int | None = None,
+    ) -> float:
         """
         Calculate the multi-component reward for the current state.
 
-        Evaluates six reward components:
+        Evaluates seven reward components:
         1. Event progress - new story/item events triggered
         2. Healing - HP restoration (Pokemon Center usage)
         3. Badge collection - gym victories
         4. Exploration - visiting new coordinates
         5. Map discovery - entering new map areas
-        6. Stuck penalty - negative reward for lack of progress
+        6. Interaction novelty - pressing A somewhere new
+        7. Stuck penalty - off by default; see ``stuck_penalty``
 
         Args:
             state: Current game state after the action.
             prev_state: Previous game state, or None if first step.
+            action: Action index that produced ``state``, if the caller
+                tracks it. Required for the interaction reward.
 
         Returns:
             Total reward as sum of all components (scaled by reward_scale).
@@ -494,7 +531,6 @@ class DefaultReward:
         Notes:
             - Updates internal tracking state (visited sets, max values)
             - Stores component breakdown in self.last_rewards for logging
-            - Stuck penalty only activates after 500+ steps without progress
         """
         # Initialize reward components dictionary
         # Each component starts at 0 and is set if its condition is met
@@ -504,6 +540,7 @@ class DefaultReward:
             "badge": 0.0,       # Gym badge collection
             "explore": 0.0,     # New coordinate visited
             "map_progress": 0.0,  # New map area entered
+            "interact": 0.0,    # Pressed A somewhere new
             "stuck": 0.0,       # Penalty for no progress
         }
 
@@ -575,10 +612,24 @@ class DefaultReward:
             rewards["map_progress"] = self.reward_scale * 2.0
 
         # ---------------------------------------------------------------------
+        # Interaction Novelty Reward
+        # ---------------------------------------------------------------------
+        # Press the A button somewhere it has not been pressed this episode.
+        # Under a movement reward A is otherwise strictly bad: it opens
+        # dialogue, which freezes position and stops paying for new tiles, so
+        # the policy learns never to interact -- and therefore never picks up a
+        # starter, which needs several A presses in Oak's lab. Paying once per
+        # position keeps it bounded and un-farmable, like coordinate novelty.
+        if action == ACTION_A and coord not in self.interacted_coords:
+            self.interacted_coords.add(coord)
+            rewards["interact"] = self.reward_scale * self.interact_weight * 0.1
+
+        # ---------------------------------------------------------------------
         # Stuck Penalty
         # ---------------------------------------------------------------------
         # Small negative reward if making no progress for extended period
-        # Prevents the agent from getting stuck in unproductive loops
+        # Prevents the agent from getting stuck in unproductive loops.
+        # Defaults to 0 because it also fires during dialogue and menus.
         has_progress = any(r > 0 for r in rewards.values())
         if has_progress:
             # Reset counter when any progress is made
@@ -588,8 +639,7 @@ class DefaultReward:
             self.steps_without_progress += 1
             # Apply penalty after threshold (500 steps = ~8 seconds of gameplay)
             if self.steps_without_progress > 500:
-                # Penalty: -0.05 × scale (gentle nudge to try something different)
-                rewards["stuck"] = self.reward_scale * -0.05
+                rewards["stuck"] = self.reward_scale * -self.stuck_penalty
 
         # Store breakdown for logging via get_info()
         self.last_rewards = rewards
@@ -619,6 +669,7 @@ class DefaultReward:
         """
         self.visited_coords.clear()
         self.visited_maps.clear()
+        self.interacted_coords.clear()
         self.max_event_count = 0
         self.max_badges = 0
         self.total_healing = 0.0
@@ -726,7 +777,12 @@ class BadgesOnlyReward:
     # Most recent reward breakdown (for logging)
     last_rewards: dict = field(default_factory=dict)
 
-    def calculate(self, state: GameState, prev_state: GameState | None) -> float:
+    def calculate(
+        self,
+        state: GameState,
+        prev_state: GameState | None,
+        action: int | None = None,
+    ) -> float:
         """
         Calculate badge-only reward with step penalty.
 
@@ -735,6 +791,7 @@ class BadgesOnlyReward:
         Args:
             state: Current game state.
             prev_state: Previous state (unused in this simple reward).
+            action: Action index (unused in this simple reward).
 
         Returns:
             Reward value (positive for badges, negative step penalty).
@@ -811,24 +868,37 @@ class ExplorationReward:
     # Set of map_ids visited this episode
     visited_maps: set = field(default_factory=set)
 
+    # Weight for the interaction-novelty reward (pressing A somewhere new)
+    interact_weight: float = 1.0
+
+    # Set of (map_id, x, y) coordinates where A has been pressed this episode
+    interacted_coords: set = field(default_factory=set)
+
     # Most recent reward breakdown (for logging)
     last_rewards: dict = field(default_factory=dict)
 
-    def calculate(self, state: GameState, prev_state: GameState | None) -> float:
+    def calculate(
+        self,
+        state: GameState,
+        prev_state: GameState | None,
+        action: int | None = None,
+    ) -> float:
         """
         Calculate exploration-focused reward.
 
-        Rewards visiting new coordinates and discovering new map areas.
-        No rewards for events, badges, or other game progress.
+        Rewards visiting new coordinates, discovering new map areas, and
+        pressing A somewhere new. No rewards for events, badges, or other game
+        progress.
 
         Args:
             state: Current game state.
             prev_state: Previous state (unused in this reward).
+            action: Action index that produced ``state``, if tracked.
 
         Returns:
-            Exploration reward (coordinate + map discovery).
+            Exploration reward (coordinate + map discovery + interaction).
         """
-        rewards = {"explore": 0.0, "map": 0.0}
+        rewards = {"explore": 0.0, "map": 0.0, "interact": 0.0}
 
         # Reward for visiting new coordinates
         coord = (state.map_id, state.x, state.y)
@@ -843,6 +913,13 @@ class ExplorationReward:
             # +1.0 × reward_scale per new map
             rewards["map"] = self.reward_scale * 1.0
 
+        # Reward for pressing A somewhere new. Pure exploration otherwise
+        # teaches the agent to avoid the interact button entirely, and the
+        # starter is behind several A presses.
+        if action == ACTION_A and coord not in self.interacted_coords:
+            self.interacted_coords.add(coord)
+            rewards["interact"] = self.reward_scale * self.interact_weight * 0.1
+
         self.last_rewards = rewards
         return sum(rewards.values())
 
@@ -850,6 +927,7 @@ class ExplorationReward:
         """Reset for new episode."""
         self.visited_coords.clear()
         self.visited_maps.clear()
+        self.interacted_coords.clear()
         self.last_rewards = {}
 
     def get_info(self) -> dict:
@@ -882,6 +960,8 @@ def create_reward(
     name: str = "default",
     reward_scale: float = 0.5,
     explore_weight: float = 0.1,
+    interact_weight: float = 1.0,
+    stuck_penalty: float = 0.0,
 ) -> RewardFunction:
     """
     Create a reward function by name using the factory pattern.
@@ -933,5 +1013,12 @@ def create_reward(
     # Create instance with appropriate arguments
     # Only DefaultReward uses explore_weight
     if name == "default":
-        return cls(reward_scale=reward_scale, explore_weight=explore_weight)
+        return cls(
+            reward_scale=reward_scale,
+            explore_weight=explore_weight,
+            interact_weight=interact_weight,
+            stuck_penalty=stuck_penalty,
+        )
+    if name == "exploration":
+        return cls(reward_scale=reward_scale, interact_weight=interact_weight)
     return cls(reward_scale=reward_scale)

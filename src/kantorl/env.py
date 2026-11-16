@@ -277,6 +277,8 @@ class KantoRedEnv(gym.Env):
                 reward_fn,
                 reward_scale=self.config.reward_scale,
                 explore_weight=self.config.explore_weight,
+                interact_weight=self.config.interact_weight,
+                stuck_penalty=self.config.stuck_penalty,
             )
         else:
             # Use provided reward function instance directly
@@ -645,7 +647,7 @@ class KantoRedEnv(gym.Env):
         )
 
         # Calculate reward from state change
-        reward = self.reward_fn.calculate(current_state, self.prev_state)
+        reward = self.reward_fn.calculate(current_state, self.prev_state, action)
 
         # Store state for next step's delta
         self.prev_state = current_state
