@@ -252,6 +252,16 @@ ruler. Output:
 A milestone that was never reached is reported with `reach_rate: 0` and a null
 median step, which is deliberately distinct from "reached at step 0".
 
+The question the tiers ask is comparative, so `scripts/compare_milestones.py`
+puts several reports in one table:
+
+```bash
+python scripts/compare_milestones.py runs/t0_pure/eval runs/t1_minimal/eval runs/t2_pragmatic/eval
+```
+
+Milestones reached at step 0 are marked `*`: they are already true before the
+agent acts (the starting map, for example), so they carry no progress signal.
+
 Checkpoints are self-describing: the loader reads the policy class from the
 archive, so PPO and RecurrentPPO both work, and the observation tier, frame
 stack and screen size are recovered from the recorded observation space.
