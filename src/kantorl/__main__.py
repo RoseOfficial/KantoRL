@@ -384,6 +384,27 @@ def main() -> int:
         help="Disable the progress bar (faster on Windows consoles)",
     )
     tier_run_parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Broadcast agent trails to the shared map visualizer",
+    )
+    tier_run_parser.add_argument(
+        "--stream-user",
+        default="KantoRL",
+        help="Display name on the shared map (default: KantoRL)",
+    )
+    tier_run_parser.add_argument(
+        "--stream-color",
+        default="#ff0000",
+        help="Trail colour on the shared map (default: #ff0000)",
+    )
+    tier_run_parser.add_argument(
+        "--stream-sprite",
+        type=int,
+        default=0,
+        help="Sprite ID (0-50) for the shared map (default: 0)",
+    )
+    tier_run_parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -721,6 +742,10 @@ def main() -> int:
                 resume=not args.no_resume,
                 reward_fn=kwargs.get("reward_fn", "default"),
                 seed=args.seed if args.seed is not None else kwargs.get("seed", 42),
+                enable_streaming=args.stream,
+                stream_username=args.stream_user,
+                stream_color=args.stream_color,
+                stream_sprite_id=args.stream_sprite,
                 base_config=config,
                 show_progress=not args.no_progress,
             )
