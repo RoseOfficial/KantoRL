@@ -11,6 +11,9 @@
 
 A minimal, educational RL environment for Pokemon Red. Simple enough for students and hobbyists to understand and modify.
 
+Measured results, and the harness bugs found while getting them, are recorded in
+[docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
+
 ## Setup
 
 Verified on Windows with Python 3.13 and an 8-core/16-thread CPU.
