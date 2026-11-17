@@ -77,15 +77,20 @@ BADGE_LABELS: tuple[str, ...] = (
 # Early-game chain every tier is measured against, by event bit index.
 # These always appear in the summary, even when a policy never reaches them:
 # "never reached" is the result that matters most for a naive tier.
+#
+# Indices are taken from pret/pokered `constants/event_constants.asm` and
+# verified empirically: a save state holding a starter has bit 34 set. The
+# previous indices were hand-guessed and watched unrelated bits -- bit 50 is
+# not "Got Starter", so that milestone could never fire.
 _CORE_EVENT_INDICES: tuple[int, ...] = (
-    0,   # Game Started
-    50,  # Got Starter Pokemon
-    53,  # Oak Gave Balls
-    1,   # Got Oak's Parcel
-    2,   # Delivered Oak's Parcel
-    3,   # Got Pokedex
-    52,  # Defeated Wild Pokemon First Time
-    16,  # Beat Route 22 Rival
+    0,     # Followed Oak into the lab
+    33,    # Oak asked which starter to take
+    34,    # Got starter
+    36,    # Got Pokeballs from Oak
+    37,    # Got Pokedex
+    57,    # Picked up Oak's Parcel
+    56,    # Delivered Oak's Parcel
+    1317,  # Beat the Route 22 rival (first battle)
 )
 
 # Stable key set that is always reported.

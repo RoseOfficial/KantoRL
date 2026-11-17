@@ -14,7 +14,7 @@ Memory Map Reference (Pokemon Red US v1.0):
     - Player state: 0xD300-0xD400
     - Party Pokemon: 0xD163-0xD272
     - Battle state: 0xD057-0xD100
-    - Event flags: 0xD747-0xD87E (312 bytes, 2496 flags)
+    - Event flags: 0xD747-0xD887 (320 bytes, 2560 flags)
     - Items: 0xD31D-0xD346
 
 Architecture Role:
@@ -218,16 +218,16 @@ ADDR_ENEMY_MAX_HP = 0xCFE8
 
 # Event Flags Start Address
 # Address: 0xD747
-# Size: 312 bytes (2496 individual flags)
+# Size: 320 bytes (2560 individual flags), per pokered NUM_EVENTS = 0xA00
 # Format: Bitfield (8 flags per byte)
 # Source: pokered disassembly (wEventFlags)
 # Note: Some flags are volatile (reset on map change), others are permanent
 ADDR_EVENT_FLAGS = 0xD747
 
 # Number of bytes containing event flags
-# 312 bytes * 8 bits = 2496 actual flags
-# We round up to 2560 for observation space (multiple of 256 for efficiency)
-EVENT_FLAGS_SIZE = 312
+# 2560 bits = 320 bytes, matching pokered's NUM_EVENTS
+# Observation space is padded to 2560 bits (multiple of 256 for alignment)
+EVENT_FLAGS_SIZE = 320
 
 
 # =============================================================================
@@ -741,13 +741,13 @@ def get_event_flags(pyboy: "PyBoy") -> np.ndarray:
         142 event flags are set
 
     Notes:
-        - 312 bytes * 8 bits = 2496 actual flags, padded to 2560
+        - 320 bytes * 8 bits = 2560 flags, matching pokered's NUM_EVENTS
         - Padding to 2560 (multiple of 256) for observation space alignment
         - Used directly in the observation space for the agent
         - Many flags are permanently set, some reset on map change
         - Uses vectorized np.unpackbits for ~10x speedup vs pure Python loop
     """
-    # Read all 312 flag bytes in one slice (avoids 312 individual read_byte calls)
+    # Read all 320 flag bytes in one slice (avoids 320 individual read_byte calls)
     # pyboy.memory[...] returns a list of ints, so we use np.array (not frombuffer)
     raw = np.array(
         pyboy.memory[ADDR_EVENT_FLAGS : ADDR_EVENT_FLAGS + EVENT_FLAGS_SIZE],
@@ -758,7 +758,7 @@ def get_event_flags(pyboy: "PyBoy") -> np.ndarray:
     # extraction order where bit 0 is the LSB
     flags = np.unpackbits(raw, bitorder="little").astype(np.int8)
 
-    # Pad from 2496 to 2560 for consistent observation space size
+    # Already 2560; the pad is a no-op kept for shape stability
     return np.pad(flags, (0, 2560 - len(flags)))
 
 
@@ -785,7 +785,7 @@ def count_event_flags(pyboy: "PyBoy") -> int:
         - Used in reward calculation to detect new events
         - Typical endgame value is ~1000+ flags
     """
-    # Read all 312 flag bytes in one slice and count set bits via unpackbits
+    # Read all 320 flag bytes in one slice and count set bits via unpackbits
     # pyboy.memory[...] returns a list of ints, so we use np.array (not frombuffer)
     raw = np.array(
         pyboy.memory[ADDR_EVENT_FLAGS : ADDR_EVENT_FLAGS + EVENT_FLAGS_SIZE],

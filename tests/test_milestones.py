@@ -126,7 +126,9 @@ def test_badge_labels_cover_eight_badges() -> None:
 
 
 def test_event_and_map_labels_are_human_readable() -> None:
-    assert event_milestone(3).label == "Got Pokedex"
+    # Indices from pret/pokered: 37 is EVENT_GOT_POKEDEX, 34 is GOT_STARTER.
+    assert event_milestone(37).label == "Got Pokédex"
+    assert event_milestone(34).label == "Got Starter"
     assert map_milestone(0).label == "Pallet Town"
 
 
