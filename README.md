@@ -38,21 +38,24 @@ gives you this, which is what you want: at this model size a GPU is *slower*
 ## Throughput
 
 Two different numbers matter, and they disagree about the best configuration.
+All figures below include `fast_mode=True` (PyBoy's optimised path, ~3.2x per
+env) and the last-frame render that keeps screen observations live.
 
 **Environment ceiling.** With `scripts/bench_throughput.py` (real `SubprocVecEnv`,
 full observation, IPC included, no training loop):
 
 | envs | steps/s | per-env steps/s | scaling | RSS |
 |---:|---:|---:|---:|---:|
-| 1 | 292 | 292 | 1.00x | 0.4 GB |
-| 4 | 856 | 214 | 2.93x | 1.0 GB |
-| 8 | 1,393 | 174 | 4.77x | 2.1 GB |
-| 16 | 2,161 | 135 | 7.40x | 3.9 GB |
-| 20 | 1,942 | 97 | 6.65x | 4.9 GB |
-| 32 | 2,260 | 71 | 7.74x | 7.6 GB |
+| 4 | 2,181 | 545 | 1.00x | 1.2 GB |
+| 8 | 3,272 | 409 | 1.50x | 2.1 GB |
+| 16 | 4,562 | 285 | 2.09x | 4.0 GB |
+| 24 | 5,405 | 225 | 2.48x | 5.9 GB |
+| 32 | 5,750 | 180 | 2.64x | 7.8 GB |
+| 48 | 6,508 | 136 | 2.98x | 11.5 GB |
 
-One environment per hardware thread is where per-env throughput stops paying
-off. Memory is roughly 245 MB per environment.
+Memory is roughly 240 MB per environment. Per-env throughput falls steadily,
+but total throughput keeps rising because each env is now cheap enough that the
+policy process, not the emulators, is the limit.
 
 **Training throughput.** That ceiling is not what training achieves. SB3
 collects a rollout and then updates on the same CPU while every worker sits
@@ -61,26 +64,24 @@ phases separately:
 
 | envs | rollout threads | update threads | steps/s |
 |---:|---:|---:|---:|
-| 16 | 16 | 16 | 563 |
-| 16 | 2 | 16 | 951 |
-| 32 | 2 | 16 | **1,121** |
-| 48 | 2 | 16 | 1,135 (regresses: memory pressure) |
+| 16 | 2 | 16 | 1,558 |
+| 32 | 2 | 16 | **1,835** |
+| 48 | 2 | 16 | 1,880 |
+| 64 | 2 | 16 | 1,913 |
 
-Two things drive the difference. The policy does one small forward pass per
-environment step, so a wide thread pool is pure overhead during rollout; the
-gradient update wants every core. `ThreadTuningCallback` retunes torch between
-the phases, and the extra envs fill the idle time during updates. Together they
-take the shipped configuration from 563 to about 1,121 steps/s — roughly 5 hours
-for a 20M-timestep run.
-
-Throughput is not constant: it starts near 2,000 steps/s and falls toward about
-1,000 as the agent reaches busier scenes, because emulation cost depends on what
-is on screen.
+The update now consumes 44-47% of wall time, so doubling the environments buys
+less than doubling the emulator speed did. 32 envs is the shipped setting:
+64 is only 4% faster and costs twice the memory.
 
 ```powershell
-.venv\Scripts\python scripts/bench_throughput.py "C:/roms/Pokemon Red.gb" --envs 1 2 4 8 16
+.venv\Scripts\python scripts/bench_throughput.py "C:/roms/Pokemon Red.gb" --envs 4 8 16 32 48
 .venv\Scripts\python scripts/bench_train.py "C:/roms/Pokemon Red.gb" --sweep
 ```
+
+**`fast_mode` is a different emulator configuration, not just a speed knob.**
+It skips sound and serial emulation and simplifies LCD timing, so runs made
+with it are not step-comparable with earlier checkpoints. Treat it as a new
+baseline.
 
 Two things that sound like wins but are not: the rich progress bar costs
 nothing measurable (48.0s vs 48.4s for 40k steps), and moving the policy to CUDA

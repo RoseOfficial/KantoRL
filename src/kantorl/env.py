@@ -474,6 +474,8 @@ class KantoRedEnv(gym.Env):
                 self.config.rom_path,
                 window=window,
                 sound=False,
+                # Optimised path: ~3.2x faster, slightly less accurate
+                fast_mode=self.config.fast_mode,
             )
 
             # =============================================================
@@ -755,10 +757,17 @@ class KantoRedEnv(gym.Env):
         if release:
             self.pyboy.send_input(release)
 
-        # Advance remaining frames to reach action_freq total
+        # Advance remaining frames to reach action_freq total.
+        # The final frame must render: with render=False PyBoy 2.9 never updates
+        # the screen buffer, so _get_screen_gray() would read a frozen frame and
+        # every "screens" observation would be identical. Rendering only the last
+        # frame costs ~1% and keeps the pixels live.
         remaining = self.config.action_freq - press_frames
         if remaining > 0:
-            self.pyboy.tick(remaining, False)
+            self.pyboy.tick(remaining, True)
+        else:
+            # Degenerate config (action_freq <= press_frames): render one frame
+            self.pyboy.tick(1, True)
 
     def _get_observation(self) -> dict[str, np.ndarray]:
         """

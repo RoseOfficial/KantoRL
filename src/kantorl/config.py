@@ -136,6 +136,12 @@ class KantoConfig:
     # False: Shows game window via SDL2 (useful for debugging/demo)
     headless: bool = True
 
+    # PyBoy's optimised emulation path: skips sound and serial emulation and
+    # simplifies LCD timing. Measured 3.2x faster per env (299 -> 956 steps/s).
+    # Less accurate, so results are not step-comparable with runs made before
+    # this was enabled.
+    fast_mode: bool = True
+
     # Frame skip: number of emulator frames between agent decisions
     # GameBoy runs at 60 FPS, so action_freq=24 means ~2.5 actions per second
     # Higher values = faster training but coarser control
