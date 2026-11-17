@@ -204,9 +204,9 @@ kantorl tier run t0_pure pokemon_red.gb --session runs/t0
 
 | Tier | Observation | Reward | Assumes |
 |---|---|---|---|
-| `t0_pure` | `screens` | coordinate novelty | action set + frame rate |
-| `t1_minimal` | `screens`, `health` | default (progress shaped) | pixels + visible HP |
-| `t2_pragmatic` | all seven | default (progress shaped) | RAM progress oracles |
+| `t0_pure` | `screens` | default (shared) | action set + frame rate |
+| `t1_minimal` | `screens`, `health` | default (shared) | pixels + visible HP |
+| `t2_pragmatic` | all seven | default (shared) | RAM progress oracles |
 
 T0 and T1 and T2 hold `max_steps`, `frame_stacks`, `screen_size`, reward scale
 and `gamma` identical. The pairwise difference is therefore the observation,

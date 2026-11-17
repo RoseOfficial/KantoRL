@@ -47,7 +47,7 @@ def test_t0_is_the_leanest_tier() -> None:
     """T0 must expose pixels and nothing else."""
     t0 = load_tier("t0_pure")
     assert t0.config["obs_components"] == ["screens"]
-    assert t0.train["reward_fn"] == "exploration"
+    assert t0.train["reward_fn"] == "default"
 
 
 def test_t1_and_t2_share_reward_and_horizon() -> None:
@@ -125,3 +125,23 @@ def test_tier_with_no_description_defaults_to_empty(tmp_path: Path) -> None:
     tier = load_tier(path)
     assert tier.description == ""
     assert tier.train == {}
+
+
+def test_all_tiers_share_reward_and_horizon() -> None:
+    """The observation must be the only axis that differs between tiers."""
+    tiers = [load_tier(name) for name in ("t0_pure", "t1_minimal", "t2_pragmatic")]
+
+    assert {t.train["reward_fn"] for t in tiers} == {"default"}
+    assert len({(t.config["max_steps"], t.config["stagnation_steps"]) for t in tiers}) == 1
+    assert len(
+        {
+            (
+                t.config["reward_scale"],
+                t.config["explore_weight"],
+                t.config["interact_weight"],
+                t.config["level_weight"],
+                t.config["stuck_penalty"],
+            )
+            for t in tiers
+        }
+    ) == 1
