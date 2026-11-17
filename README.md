@@ -228,7 +228,13 @@ agent first reached something real in the game.
 
 ```bash
 kantorl milestones runs/t0/checkpoints/model_1000000.zip pokemon_red.gb \
-    --seeds 0 1 2 --budget 163840 --out runs/eval/t0
+    --seeds 0 1 2 --budget 20000 --out runs/eval/t0
+```
+
+If training started from a save state, pass the same `--save-state` here.
+Without it the policy is evaluated from a cold ROM boot — a starting state it
+never trained on, which silently invalidates the comparison.
+
 ```
 
 Every run uses the same seeds and step budget, so reports from different
