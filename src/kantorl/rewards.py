@@ -172,6 +172,10 @@ class GameState:
     # Range: 0-~3000+ (used to calculate HP ratio)
     max_hp: int = 0
 
+    # Sum of levels across the party (0 when the party is empty)
+    # Used by the level reward, which pays for levelling up
+    level_sum: int = 0
+
     # ===================
     # Episode Tracking
     # ===================
@@ -237,6 +241,7 @@ class GameState:
             event_count=event_count,  # Total events triggered
             current_hp=current_hp,
             max_hp=max_hp,
+            level_sum=sum(memory.get_party_levels(pyboy)),
             step_count=step_count,
         )
 
@@ -461,6 +466,30 @@ class DefaultReward:
     # exactly the states the agent needs to spend time in.
     stuck_penalty: float = 0.0
 
+    # Weight for the level reward (sum of party levels, capped)
+    # Without it the agent enters battles but never wins any: nothing pays for
+    # levelling, and every gym is behind a level gap. PokeRL reports that
+    # removing this reward caused their experiments to fail.
+    level_weight: float = 1.0
+
+    # Potential of the level reward at the previous step (None until baselined)
+    prev_level_potential: float | None = None
+
+    @staticmethod
+    def level_potential(level_sum: int) -> float:
+        """Capped sum-of-levels potential, after Whidden/PokeRL.
+
+        Below 15 the potential is the raw sum, so the first few levels are
+        worth a lot. Above it, growth slows to a quarter rate so that late-game
+        grinding does not dominate the reward.
+
+        Applied as a *potential difference*, so it shapes credit assignment
+        without changing which policy is optimal (Ng et al., 1999).
+        """
+        if level_sum < 15:
+            return float(level_sum)
+        return 30.0 + (level_sum - 15) / 4.0
+
     # ===================
     # Episode Tracking
     # ===================
@@ -547,6 +576,7 @@ class DefaultReward:
             "explore": 0.0,     # New coordinate visited
             "map_progress": 0.0,  # New map area entered
             "interact": 0.0,    # Pressed A somewhere new
+            "level": 0.0,       # Party levelled up
             "stuck": 0.0,       # Penalty for no progress
         }
 
@@ -629,6 +659,22 @@ class DefaultReward:
             rewards["map_progress"] = self.reward_scale * 2.0
 
         # ---------------------------------------------------------------------
+        # Level Reward
+        # ---------------------------------------------------------------------
+        # Potential-based shaping on the party's level sum. The agent enters
+        # wild battles and wins none, because until this existed nothing paid
+        # for levelling -- and every gym sits behind a level gap.
+        potential = self.level_potential(state.level_sum)
+        if self.prev_level_potential is None:
+            self.prev_level_potential = potential
+        elif potential > self.prev_level_potential:
+            rewards["level"] = (
+                self.reward_scale * self.level_weight * (potential - self.prev_level_potential)
+            )
+            # Monotone: a party change must not let the agent re-earn levels.
+            self.prev_level_potential = potential
+
+        # ---------------------------------------------------------------------
         # Interaction Novelty Reward
         # ---------------------------------------------------------------------
         # Press the A button somewhere it has not been pressed this episode.
@@ -690,6 +736,7 @@ class DefaultReward:
         self.max_event_count = 0
         self.max_badges = 0
         self.baselined = False
+        self.prev_level_potential = None
         self.total_healing = 0.0
         self.steps_without_progress = 0
         self.last_rewards = {}
@@ -980,6 +1027,7 @@ def create_reward(
     explore_weight: float = 0.1,
     interact_weight: float = 1.0,
     stuck_penalty: float = 0.0,
+    level_weight: float = 1.0,
 ) -> RewardFunction:
     """
     Create a reward function by name using the factory pattern.
@@ -1036,6 +1084,7 @@ def create_reward(
             explore_weight=explore_weight,
             interact_weight=interact_weight,
             stuck_penalty=stuck_penalty,
+            level_weight=level_weight,
         )
     if name == "exploration":
         return cls(reward_scale=reward_scale, interact_weight=interact_weight)

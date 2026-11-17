@@ -156,3 +156,66 @@ def test_reset_rebaselines_for_the_next_episode():
     reward.calculate(GameState(map_id=0, x=0, y=0, event_count=8), None, action=0)
 
     assert reward.last_rewards["event"] == 0.0
+
+
+# =============================================================================
+# LEVEL REWARD
+# =============================================================================
+
+
+def test_level_potential_is_linear_then_capped():
+    assert DefaultReward.level_potential(0) == 0.0
+    assert DefaultReward.level_potential(10) == 10.0
+    assert DefaultReward.level_potential(15) == 30.0
+    # Above 15, growth slows to a quarter rate.
+    assert DefaultReward.level_potential(19) == pytest.approx(31.0)
+
+
+def test_first_step_does_not_pay_for_the_starting_levels():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=5), None, action=0)
+
+    assert reward.last_rewards["level"] == 0.0
+
+
+def test_levelling_up_pays_the_potential_difference():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=5), None, action=0)
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=6), None, action=0)
+
+    assert reward.last_rewards["level"] == pytest.approx(1.0)
+
+
+def test_level_gains_above_the_cap_are_worth_a_quarter():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=15), None, action=0)
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=19), None, action=0)
+
+    assert reward.last_rewards["level"] == pytest.approx(1.0)
+
+
+def test_losing_levels_does_not_allow_re_earning_them():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=10), None, action=0)
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=8), None, action=0)
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=10), None, action=0)
+
+    assert reward.last_rewards["level"] == 0.0
+
+
+def test_level_tracking_resets_between_episodes():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=20), None, action=0)
+    reward.reset()
+    reward.calculate(GameState(map_id=0, x=0, y=0, level_sum=20), None, action=0)
+
+    assert reward.last_rewards["level"] == 0.0
+
+
+def test_create_reward_forwards_level_weight():
+    assert create_reward("default", level_weight=0.25).level_weight == 0.25

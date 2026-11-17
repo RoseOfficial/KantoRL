@@ -39,6 +39,9 @@ config:
   interact_weight: 1.0
   # Off: the stuck penalty also fires during dialogue and menus.
   stuck_penalty: 0.0
+  # Capped sum of party levels, paid as a potential difference. Without it
+  # battles are pure cost and every gym sits behind a level gap.
+  level_weight: 1.0
 
   gamma: 0.995
   # Full training-loop throughput on the reference machine (8C/16T): 32 envs at

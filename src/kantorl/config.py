@@ -205,6 +205,11 @@ class KantoConfig:
     # reward-free stretch, including the dialogue and menus that progress needs.
     stuck_penalty: float = 0.0
 
+    # Weight for the level reward (capped sum of party levels, paid as a
+    # potential difference). Nothing else pays for levelling, and every gym
+    # sits behind a level gap.
+    level_weight: float = 1.0
+
     # =============================================================================
     # TRAINING HYPERPARAMETERS (PPO)
     # These values are tuned to match PokemonRedExperiments V2 for reproducibility
@@ -473,6 +478,10 @@ class KantoConfig:
         if self.stuck_penalty < 0:
             raise ValueError(
                 f"stuck_penalty must be >= 0, got {self.stuck_penalty}."
+            )
+        if self.level_weight < 0:
+            raise ValueError(
+                f"level_weight must be >= 0, got {self.level_weight}."
             )
 
         # Validate curriculum settings
