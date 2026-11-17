@@ -413,6 +413,14 @@ def main() -> int:
             "runs, so measuring a tier means several seeds, not one."
         ),
     )
+    tier_run_parser.add_argument(
+        "--save-state",
+        default=None,
+        help=(
+            "Start every episode from this PyBoy save state instead of the ROM "
+            "boot. Use one captured after the starter to skip the prologue."
+        ),
+    )
 
     # -------------------------------------------------------------------------
     # Info Command
@@ -728,6 +736,13 @@ def main() -> int:
             tier = load_tier(args.tier)
             session = args.session or f"runs/{tier.name}"
             config = tier.to_config(args.rom_path, session)
+            if args.save_state:
+                from pathlib import Path as _Path
+
+                if not _Path(args.save_state).is_file():
+                    print(f"Save state not found: {args.save_state}")
+                    return 1
+                config.save_state_path = args.save_state
             kwargs = tier.train_kwargs()
 
             print(f"Tier: {tier.name}")
