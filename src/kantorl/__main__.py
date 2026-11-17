@@ -334,6 +334,14 @@ def main() -> int:
         default=None,
         help="Override frames per action (must match training)",
     )
+    mil_parser.add_argument(
+        "--save-state",
+        default=None,
+        help=(
+            "Start episodes from this save state, matching training. Without "
+            "it the policy is evaluated from a cold ROM boot."
+        ),
+    )
 
     # -------------------------------------------------------------------------
     # Tier Command
@@ -689,6 +697,8 @@ def main() -> int:
         base_config = KantoConfig(rom_path=args.rom_path)
         if args.action_freq is not None:
             base_config.action_freq = args.action_freq
+        if args.save_state:
+            base_config.save_state_path = args.save_state
 
         report = evaluate_milestones(
             checkpoint_path=args.checkpoint,
