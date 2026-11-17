@@ -477,3 +477,64 @@ def test_baseline_is_rearmed_by_reset():
     tracker.update({"step": 16, "map_id": 0, "badges": 0, "events": 8, "new_event_indices": [50]})
 
     assert not [k for k in tracker.first_steps if k.startswith("event:")]
+
+
+def test_save_state_flags_are_reported_at_step_zero():
+    """Progress inherited from a save state is real, not noise to discard."""
+    tracker = MilestoneTracker()
+
+    tracker.update(
+        {
+            "step": 0,
+            "map_id": 40,
+            "badges": 0,
+            "events": 11,
+            "new_event_indices": [],
+            "event_indices_set": [0, 32, 33, 34, 35, 37, 39, 56, 57],
+        }
+    )
+
+    assert tracker.first_steps["event:34"] == 0
+    assert tracker.first_steps["event:37"] == 0
+    # Maps recorded in the same call behave as before.
+    assert tracker.first_steps["map:40"] == 0
+
+
+def test_flags_earned_after_a_save_state_start_are_recorded_normally():
+    tracker = MilestoneTracker()
+    tracker.update(
+        {
+            "step": 0,
+            "map_id": 40,
+            "badges": 0,
+            "events": 11,
+            "new_event_indices": [],
+            "event_indices_set": [34],
+        }
+    )
+
+    tracker.update(
+        {"step": 500, "map_id": 0, "badges": 0, "events": 12, "new_event_indices": [57]}
+    )
+
+    assert tracker.first_steps["event:57"] == 500
+    assert tracker.first_steps["event:34"] == 0
+
+
+def test_init_block_still_ignored_when_it_arrives_after_reset():
+    """The cold-boot path must not regress into counting init flags."""
+    tracker = MilestoneTracker()
+    tracker.update({"step": 0, "map_id": 0, "badges": 0, "events": 0, "new_event_indices": []})
+
+    tracker.update(
+        {
+            "step": 16,
+            "map_id": 0,
+            "badges": 0,
+            "events": 8,
+            "new_event_indices": INIT_EVENTS,
+            "event_indices_set": INIT_EVENTS,
+        }
+    )
+
+    assert not [k for k in tracker.first_steps if k.startswith("event:")]

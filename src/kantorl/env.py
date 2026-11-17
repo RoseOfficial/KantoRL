@@ -630,6 +630,12 @@ class KantoRedEnv(gym.Env):
         obs = self._get_observation()
         info = self._get_info()
 
+        # Pre-existing progress is real when an episode starts from a save
+        # state. Publish which flags are already set so the milestone tracker
+        # can report them at step 0 instead of discarding them as baseline.
+        # One 320-byte read per episode; not on the step path.
+        info["event_indices_set"] = memory.get_set_event_indices(self.pyboy)
+
         return obs, info
 
     def step(

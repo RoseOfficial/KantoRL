@@ -794,6 +794,25 @@ def count_event_flags(pyboy: "PyBoy") -> int:
     return int(np.sum(np.unpackbits(raw)))
 
 
+def get_set_event_indices(pyboy: "PyBoy") -> list[int]:
+    """Return the indices of all currently-set event flags.
+
+    Used once per episode, at reset, so the milestone tracker can distinguish
+    progress a save state already contains from progress the agent earned.
+
+    Args:
+        pyboy: The PyBoy emulator instance.
+
+    Returns:
+        Sorted list of bit indices in ``[0, 2560)``.
+
+    Example:
+        >>> memory.get_set_event_indices(env.pyboy)[:5]
+        [0, 32, 33, 34, 35]
+    """
+    return np.flatnonzero(get_event_flags(pyboy)).astype(int).tolist()
+
+
 # =============================================================================
 # GAME STATE READING FUNCTIONS - UI STATE
 # =============================================================================

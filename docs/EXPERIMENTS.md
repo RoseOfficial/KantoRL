@@ -117,15 +117,16 @@ project needed ~150M steps for Gym 2, so 20M is roughly 13% of that.
 Replicate T0 and T2 with training seeds 43 and 44 (~10 h):
 
 ```powershell
-$rom = "C:/Users/neoga/roms/Pokemon Red.gb"
-$state = "C:\Users\neoga\roms\states\bulba_start.state"
-foreach ($t in @("t0_pure", "t2_pragmatic")) {
-  foreach ($s in @(43, 44)) {
-    .venv\Scripts\python -m kantorl tier run $t $rom --session "runs/${t}_20M_s$s" `
-        --steps 20000000 --seed $s --no-progress --save-state $state
-  }
-}
+.venv\Scripts\python scripts/run_tiers.py "C:/Users/neoga/roms/Pokemon Red.gb" `
+    --tiers t0_pure t2_pragmatic --seeds 43 44 `
+    --steps 20000000 --save-state "C:\Users\neoga\roms\states\bulba_start.state"
 ```
+
+`scripts/run_tiers.py` runs the matrix sequentially, skips sessions that
+already reached the target, resumes partial ones, and prints a per-run summary.
+Add `--dry-run` to see the plan first. T1 is deliberately excluded: its
+collapse looks like a policy pathology, so replicating it would mostly confirm
+that one broken configuration is reproducibly broken.
 
 Then evaluate each run at 5 seeds with `--save-state` and compare per tier
 across seeds, reporting the spread rather than a single ordering.

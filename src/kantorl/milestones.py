@@ -235,13 +235,21 @@ class MilestoneTracker:
         event_indices = [int(i) for i in (info.get("new_event_indices") or ())]
         event_count = int(info.get("events", 0) or 0)
         if not self._events_baselined and event_count > 0:
-            # Starting a new game sets a block of flags at once (0, 25, 32, 33,
-            # 34, 35, 39 and 960 on Red UE). They arrive before the player can
-            # act and are not achievements, but they look exactly like one to a
-            # difference detector. The first step that has any flags set is the
-            # initial state, so nothing in it counts as progress.
             self._events_baselined = True
-            event_indices = []
+            if step == 0:
+                # The episode began mid-game (a save state), so these flags are
+                # progress the run inherited rather than earned. Report them at
+                # step 0, which the report keeps distinct from "never reached".
+                event_indices = [
+                    int(i) for i in (info.get("event_indices_set") or ())
+                ]
+            else:
+                # Starting a new game sets a block of flags at once (0, 25, 32,
+                # 33, 34, 35, 39 and 960 on Red UE). They arrive before the
+                # player can act and are not achievements, but they look exactly
+                # like one to a difference detector. Treat the first batch as
+                # the initial state, so nothing in it counts as progress.
+                event_indices = []
 
         for index in event_indices:
             hit = self._record(event_milestone(index), step)
