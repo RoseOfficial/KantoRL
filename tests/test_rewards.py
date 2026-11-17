@@ -219,3 +219,24 @@ def test_level_tracking_resets_between_episodes():
 
 def test_create_reward_forwards_level_weight():
     assert create_reward("default", level_weight=0.25).level_weight == 0.25
+
+
+def test_new_event_refreshes_coordinate_novelty():
+    """Progress reopens ground: otherwise the coordinate reward stays spent."""
+    reward = DefaultReward(reward_scale=1.0, explore_weight=1.0)
+    here = GameState(map_id=0, x=1, y=1, event_count=7)
+
+    # Baseline the event counter at the game-initialization block.
+    reward.calculate(here, None, action=0)
+    assert reward.last_rewards["explore"] == pytest.approx(0.1)
+
+    # Same tile again: already visited, so nothing.
+    reward.calculate(here, None, action=0)
+    assert reward.last_rewards["explore"] == 0.0
+
+    # Gaining an event clears the visited set, so the same tile pays again.
+    gained = GameState(map_id=0, x=1, y=1, event_count=8)
+    reward.calculate(gained, None, action=0)
+
+    assert reward.last_rewards["event"] == pytest.approx(8.0)
+    assert reward.last_rewards["explore"] == pytest.approx(0.1)

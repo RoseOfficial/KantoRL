@@ -25,12 +25,18 @@ config:
 
   # Episode length, held equal across tiers so horizon is not a confound.
   #
-  # 12,288 steps is ~1.4 in-game hours. The horizon has to fit inside the
-  # training budget: at 2M steps across 32 envs each env only gets ~62k steps,
-  # so a 163,840-step episode means no episode ever ends, novelty rewards never
-  # refresh, and the signal is flat for ~62k steps. Measured: that configuration
-  # trained three policies that were worse than uniform random.
-  max_steps: 12288
+  # The cap is deliberately longer than the stagnation window below, so a
+  # productive agent can keep going while a stalled one is cut short. Before
+  # this, a 163,840-step cap against a 2M-step budget meant no episode ever
+  # ended: novelty never refreshed and all three tiers trained policies worse
+  # than uniform random.
+  max_steps: 20480
+
+  # End an episode that earns less than stagnation_reward in stagnation_steps.
+  # Refreshes every reward that resets with the episode, instead of spending
+  # ~10k steps on an agent that has stopped making progress.
+  stagnation_steps: 10240
+  stagnation_reward: 1.0
 
   # ExplorationReward: +0.1 per new (map, x, y), +1.0 per new map.
   reward_scale: 1.0

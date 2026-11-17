@@ -29,9 +29,11 @@ config:
   screen_size: [72, 80]
   action_freq: 24
   # Episode length, held equal across tiers so horizon is not a confound.
-  # 12,288 steps is ~1.4 in-game hours; see t0_pure.yaml for why the horizon
-  # must fit inside the training budget rather than exceed it.
-  max_steps: 12288
+  # Longer than the stagnation window so a productive agent can keep going;
+  # see t0_pure.yaml for the full reasoning.
+  max_steps: 20480
+  stagnation_steps: 10240
+  stagnation_reward: 1.0
 
   reward_scale: 0.5
   explore_weight: 0.3

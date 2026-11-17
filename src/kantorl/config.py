@@ -210,6 +210,12 @@ class KantoConfig:
     # sits behind a level gap.
     level_weight: float = 1.0
 
+    # End an episode that stops earning reward, instead of spending the whole
+    # horizon on a stalled agent. Reset when less than stagnation_reward is
+    # collected within stagnation_steps. 0 disables the check.
+    stagnation_steps: int = 10240
+    stagnation_reward: float = 1.0
+
     # =============================================================================
     # TRAINING HYPERPARAMETERS (PPO)
     # These values are tuned to match PokemonRedExperiments V2 for reproducibility
@@ -482,6 +488,14 @@ class KantoConfig:
         if self.level_weight < 0:
             raise ValueError(
                 f"level_weight must be >= 0, got {self.level_weight}."
+            )
+        if self.stagnation_steps < 0:
+            raise ValueError(
+                f"stagnation_steps must be >= 0, got {self.stagnation_steps}."
+            )
+        if self.stagnation_reward < 0:
+            raise ValueError(
+                f"stagnation_reward must be >= 0, got {self.stagnation_reward}."
             )
 
         # Validate curriculum settings

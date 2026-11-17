@@ -147,6 +147,45 @@ RELEASE_ACTIONS = [
 ACTION_NAMES = ["NOOP", "UP", "DOWN", "LEFT", "RIGHT", "A", "B", "START"]
 
 
+class StagnationTracker:
+    """End an episode that has stopped earning reward.
+
+    A fixed horizon keeps spending the whole budget on an agent that has
+    stalled. This ends the episode as soon as progress stops, which refreshes
+    every novelty reward that resets with the episode. It mirrors the reset
+    rule in CJBoey's improved Gen-1 baseline: reset when less than
+    ``threshold`` reward is collected within ``window`` steps.
+
+    Args:
+        window: Steps of insufficient progress before truncation. 0 disables.
+        threshold: Reward that counts as "still progressing" for the window.
+    """
+
+    def __init__(self, window: int, threshold: float) -> None:
+        self.window = int(window)
+        self.threshold = float(threshold)
+        self.reset()
+
+    def reset(self) -> None:
+        self.steps = 0
+        self.pending = 0.0
+
+    def update(self, reward: float) -> bool:
+        """Record one step; return True when the episode should be truncated."""
+        if self.window <= 0:
+            return False
+
+        self.pending += float(reward)
+        if self.pending >= self.threshold:
+            # Progress was made inside the window, so start counting again.
+            self.steps = 0
+            self.pending = 0.0
+            return False
+
+        self.steps += 1
+        return self.steps >= self.window
+
+
 # =============================================================================
 # MAIN ENVIRONMENT CLASS
 # =============================================================================
@@ -309,6 +348,13 @@ class KantoRedEnv(gym.Env):
 
         # Step counter for current episode
         self.step_count = 0
+
+        # Ends episodes that stop earning reward instead of burning the whole
+        # horizon on a stalled agent.
+        self._stagnation = StagnationTracker(
+            window=self.config.stagnation_steps,
+            threshold=self.config.stagnation_reward,
+        )
 
         # Stagger offset: pre-advances step counter on first episode only
         # so parallel envs truncate at different times instead of all at once
@@ -552,6 +598,9 @@ class KantoRedEnv(gym.Env):
         # Clear previous state (no delta on first step)
         self.prev_state = None
 
+        # A new episode gets a fresh stagnation window
+        self._stagnation.reset()
+
         # Clear action history
         self.recent_actions = np.zeros(ACTION_HISTORY_LEN, dtype=np.int64)
 
@@ -661,8 +710,11 @@ class KantoRedEnv(gym.Env):
         # Even fainting just sends you to a Pokemon Center
         terminated = False
 
-        # Truncate episode at max_steps to bound episode length
+        # Truncate at max_steps to bound episode length, or earlier when the
+        # agent has stopped earning reward (see StagnationTracker).
         truncated = self.step_count >= self.config.max_steps
+        if not truncated and self._stagnation.update(reward):
+            truncated = True
 
         # =================================================================
         # Build Info (reuses event count from observation)

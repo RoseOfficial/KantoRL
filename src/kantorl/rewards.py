@@ -603,6 +603,12 @@ class DefaultReward:
             rewards["event"] = self.reward_scale * new_events * 8.0
             # Update max to only reward new events
             self.max_event_count = state.event_count
+            # Refresh exploration novelty: progress opens new ground worth
+            # re-covering, and without this the coordinate reward stays spent
+            # for the rest of the episode. PokeRL calls the equivalent reset
+            # "crucial for backtracking". Map rewards are deliberately not
+            # reset, since that would let the agent farm town boundaries.
+            self.visited_coords.clear()
 
         # ---------------------------------------------------------------------
         # Healing Reward
