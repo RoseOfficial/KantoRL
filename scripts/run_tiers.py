@@ -39,6 +39,32 @@ def finished_steps(checkpoint_dir: Path) -> int:
     return best
 
 
+def default_governor_hours(pending_runs: int) -> float:
+    """Governor lifetime: six hours per queued run is generous at our speed."""
+    return max(6.0, 6.0 * pending_runs)
+
+
+def start_governor(hours: float, idle_seconds: float) -> subprocess.Popen | None:
+    """Launch the priority governor alongside the sweep.
+
+    Long runs should always yield CPU while someone is using the machine and
+    recover when it goes idle. Starting it here means a sweep cannot forget,
+    which is how a previous run stayed throttled for hours after the machine
+    was free.
+    """
+    script = Path(__file__).with_name("priority_governor.py")
+    if not script.exists():  # pragma: no cover - packaged installs may omit it
+        return None
+    return subprocess.Popen(
+        [
+            sys.executable, str(script),
+            "--hours", f"{hours:g}",
+            "--idle-seconds", f"{idle_seconds:g}",
+            "--interval", "15",
+        ]
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom_path")
@@ -47,6 +73,23 @@ def main() -> int:
     parser.add_argument("--steps", type=int, default=20_000_000)
     parser.add_argument("--save-state", default=None)
     parser.add_argument("--tag", default="", help="Session tag, e.g. _mod")
+    parser.add_argument(
+        "--no-governor",
+        action="store_true",
+        help="Do not start the priority governor (default: start it)",
+    )
+    parser.add_argument(
+        "--governor-hours",
+        type=float,
+        default=None,
+        help="Governor lifetime; default 6h per queued run",
+    )
+    parser.add_argument(
+        "--idle-seconds",
+        type=float,
+        default=120.0,
+        help="Idle time before training returns to normal priority",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -71,31 +114,50 @@ def main() -> int:
     if args.dry_run:
         return 0
 
+    pending = [row for row in plan if row[3] < args.steps]
+    governor = None
+    if pending and not args.no_governor:
+        governor_hours = (
+            args.governor_hours
+            if args.governor_hours is not None
+            else default_governor_hours(len(pending))
+        )
+        governor = start_governor(governor_hours, args.idle_seconds)
+        if governor is None:
+            print("warning: priority governor not started; the run will not yield CPU")
+        else:
+            print(f"priority governor: pid {governor.pid}, "
+                  f"{governor_hours:.1f}h window, idle threshold "
+                  f"{args.idle_seconds:.0f}s", flush=True)
+
     failures = []
     started = time.perf_counter()
-    for tier, seed, session, done in plan:
-        if done >= args.steps:
-            continue
+    try:
+        for tier, seed, session, done in pending:
+            cmd = [
+                sys.executable, "-m", "kantorl", "tier", "run", tier, args.rom_path,
+                "--session", str(session),
+                "--steps", str(args.steps),
+                "--seed", str(seed),
+                "--no-progress",
+            ]
+            if args.save_state:
+                cmd += ["--save-state", args.save_state]
 
-        cmd = [
-            sys.executable, "-m", "kantorl", "tier", "run", tier, args.rom_path,
-            "--session", str(session),
-            "--steps", str(args.steps),
-            "--seed", str(seed),
-            "--no-progress",
-        ]
-        if args.save_state:
-            cmd += ["--save-state", args.save_state]
-
-        print(f"\n=== {session} (seed {seed}) ===", flush=True)
-        run_start = time.perf_counter()
-        result = subprocess.run(cmd, check=False)
-        elapsed = time.perf_counter() - run_start
-        if result.returncode != 0:
-            failures.append((str(session), result.returncode))
-            print(f"    FAILED after {elapsed / 60:.1f} min (exit {result.returncode})")
-        else:
-            print(f"    finished in {elapsed / 60:.1f} min")
+            print(f"\n=== {session} (seed {seed}) ===", flush=True)
+            run_start = time.perf_counter()
+            result = subprocess.run(cmd, check=False)
+            elapsed = time.perf_counter() - run_start
+            if result.returncode != 0:
+                failures.append((str(session), result.returncode))
+                print(f"    FAILED after {elapsed / 60:.1f} min (exit {result.returncode})")
+            else:
+                print(f"    finished in {elapsed / 60:.1f} min")
+    finally:
+        if governor is not None:
+            governor.terminate()
+            governor.wait(timeout=30)
+            print("priority governor stopped; priorities restored", flush=True)
 
     total = (time.perf_counter() - started) / 60
     print(f"\nTotal wall clock: {total:.1f} min")

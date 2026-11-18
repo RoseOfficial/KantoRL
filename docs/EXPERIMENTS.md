@@ -21,6 +21,36 @@ measured, not what was hoped. Numbers are from the reference machine
 | `t1_minimal` | + `health` (1,) |
 | `t2_pragmatic` | + `level` (8,), `badges` (8), `events` (2560), `map` (48, 48), `recent_actions` (3) |
 
+## Running a long experiment
+
+Always go through `scripts/run_tiers.py`. It starts the priority governor, so a
+sweep yields CPU while you are using the machine and returns to full speed when
+you are not. A run started any other way competes with whatever you are doing,
+and a run throttled by hand stays throttled — Windows priority classes are
+static, and nothing restores them.
+
+```powershell
+.venv\Scripts\python scripts/run_tiers.py "C:/Users/neoga/roms/Pokemon Red.gb" `
+    --tiers t0_pure t2_pragmatic --seeds 42 43 --steps 20000000 --tag _mod `
+    --save-state "C:/Users/neoga/roms/states/bulba_start.state"
+```
+
+- `--tag` names the sessions, so a new variant does not collide with old runs.
+- `--dry-run` prints the plan without starting anything.
+- The governor is on by default (6 h per queued run, 120 s idle threshold).
+  `--no-governor` disables it.
+- On exit the governor restores normal priority, so a sweep can never leave the
+  machine throttled.
+
+Evaluate with the same save state, or the policy is scored on a starting state
+it never trained on:
+
+```powershell
+.venv\Scripts\python scripts/eval_runs.py "C:/Users/neoga/roms/Pokemon Red.gb" `
+    --runs "runs/*_20M_mod_s*" `
+    --save-state "C:/Users/neoga/roms/states/bulba_start.state"
+```
+
 ## Harness bugs found
 
 Each one masked the results of the runs before it. In order of discovery:
