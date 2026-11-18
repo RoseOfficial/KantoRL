@@ -205,3 +205,33 @@ T1's single seed reached a final entropy of 0.42 nats (max 2.08) and never left
 Route 1. Given that health is one of the ignored inputs above, T1's input is
 functionally the same as T0's, so this is most likely a training pathology
 rather than an observation effect. Untested.
+
+## Reward exploit: healing
+
+The first 20M run with the modular encoder earned ~490 reward per episode while
+reaching only Route 1, versus ~25 for the stock-encoder runs. A component
+breakdown over 3,000 steps shows why:
+
+| component | reward |
+|---|---:|
+| heal | 65.0 |
+| event | 12.0 |
+| map_progress | 4.0 |
+| explore | 1.1 |
+| interact | 0.8 |
+
+Healing was 78% of the total. The exploit is: lose a wild battle, black out,
+have the party restored, collect +5, repeat. The agent spent the episode near
+the player's house doing exactly that.
+
+The stock encoder never found this because it could barely act. Better
+perception made the agent capable enough to discover the exploit, which is
+worth remembering: reward farms surface as policies improve.
+
+`heal_weight` now defaults to 0. Healing is our own shaping term, not a
+frontier prior (neither PokeRL nor CJBoey reward it), so removing it costs
+nothing that the task requires. It remains opt-in for anyone who has accounted
+for the exploit.
+
+Any run trained before this fix optimised the exploit and is not comparable.
+That includes `t2_pragmatic_mod_s42`.

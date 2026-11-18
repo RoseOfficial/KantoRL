@@ -216,6 +216,11 @@ class KantoConfig:
     # sits behind a level gap.
     level_weight: float = 1.0
 
+    # Weight for the healing reward. Off by default: losing battles to black out
+    # and be healed is farmable, and was 78% of an agent's reward while it made
+    # no progress.
+    heal_weight: float = 0.0
+
     # End an episode that stops earning reward, instead of spending the whole
     # horizon on a stalled agent. Reset when less than stagnation_reward is
     # collected within stagnation_steps. 0 disables the check.
@@ -494,6 +499,10 @@ class KantoConfig:
         if self.level_weight < 0:
             raise ValueError(
                 f"level_weight must be >= 0, got {self.level_weight}."
+            )
+        if self.heal_weight < 0:
+            raise ValueError(
+                f"heal_weight must be >= 0, got {self.heal_weight}."
             )
         if self.stagnation_steps < 0:
             raise ValueError(

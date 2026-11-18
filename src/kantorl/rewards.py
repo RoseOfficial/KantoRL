@@ -472,6 +472,11 @@ class DefaultReward:
     # removing this reward caused their experiments to fail.
     level_weight: float = 1.0
 
+    # Weight for the healing reward. Off by default: losing battles so the party
+    # blacks out and is healed is farmable. Measured on a 20M run, healing was
+    # 78% of total reward while the agent made no progress.
+    heal_weight: float = 0.0
+
     # Potential of the level reward at the previous step (None until baselined)
     prev_level_potential: float | None = None
 
@@ -613,9 +618,12 @@ class DefaultReward:
         # ---------------------------------------------------------------------
         # Healing Reward
         # ---------------------------------------------------------------------
-        # Reward for restoring Pokemon HP (encourages Pokemon Center usage)
-        # Only applies if we have a previous state to compare against
-        if prev_state is not None and state.max_hp > 0:
+        # Off by default. It was farmable: an agent learns that losing a wild
+        # battle blacks it out, restores the party and pays +5. Measured on a
+        # 20M modular run, healing was 78% of total reward while the agent made
+        # no progress, so it was optimising the exploit rather than the game.
+        # Kept as an opt-in weight: it is our invention, not a frontier prior.
+        if prev_state is not None and self.heal_weight > 0 and state.max_hp > 0:
             # Calculate HP as a ratio (0.0 to 1.0) for normalized comparison
             hp_ratio_now = state.current_hp / state.max_hp
             hp_ratio_prev = (
@@ -624,8 +632,7 @@ class DefaultReward:
             # Only reward HP increases (healing), not decreases (damage)
             if hp_ratio_now > hp_ratio_prev:
                 healing = hp_ratio_now - hp_ratio_prev
-                # Reward: 10.0 × healing_ratio × scale
-                rewards["heal"] = self.reward_scale * healing * 10.0
+                rewards["heal"] = self.reward_scale * self.heal_weight * healing * 10.0
                 # Track total healing for logging
                 self.total_healing += healing
 
@@ -1034,6 +1041,7 @@ def create_reward(
     interact_weight: float = 1.0,
     stuck_penalty: float = 0.0,
     level_weight: float = 1.0,
+    heal_weight: float = 0.0,
 ) -> RewardFunction:
     """
     Create a reward function by name using the factory pattern.
@@ -1091,6 +1099,7 @@ def create_reward(
             interact_weight=interact_weight,
             stuck_penalty=stuck_penalty,
             level_weight=level_weight,
+            heal_weight=heal_weight,
         )
     if name == "exploration":
         return cls(reward_scale=reward_scale, interact_weight=interact_weight)

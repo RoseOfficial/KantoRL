@@ -44,6 +44,8 @@ config:
   # Capped sum of party levels, paid as a potential difference. Without it
   # battles are pure cost and every gym sits behind a level gap.
   level_weight: 1.0
+  # Off: losing battles to black out and heal is farmable.
+  heal_weight: 0.0
 
   gamma: 0.995
   # Full training-loop throughput on the reference machine (8C/16T): 32 envs at

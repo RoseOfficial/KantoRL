@@ -319,6 +319,7 @@ class KantoRedEnv(gym.Env):
                 interact_weight=self.config.interact_weight,
                 stuck_penalty=self.config.stuck_penalty,
                 level_weight=self.config.level_weight,
+                heal_weight=self.config.heal_weight,
             )
         else:
             # Use provided reward function instance directly

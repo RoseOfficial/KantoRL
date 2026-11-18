@@ -240,3 +240,26 @@ def test_new_event_refreshes_coordinate_novelty():
 
     assert reward.last_rewards["event"] == pytest.approx(8.0)
     assert reward.last_rewards["explore"] == pytest.approx(0.1)
+
+
+def test_healing_is_off_by_default():
+    """Losing to black out and heal is farmable, so it pays nothing by default."""
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
+    hurt = GameState(map_id=0, x=0, y=0, current_hp=5, max_hp=10)
+    healed = GameState(map_id=0, x=0, y=0, current_hp=10, max_hp=10)
+
+    reward.calculate(hurt, None, action=0)
+    reward.calculate(healed, hurt, action=0)
+
+    assert reward.last_rewards["heal"] == 0.0
+
+
+def test_healing_pays_when_explicitly_enabled():
+    reward = DefaultReward(reward_scale=1.0, explore_weight=0.0, heal_weight=1.0)
+    hurt = GameState(map_id=0, x=0, y=0, current_hp=5, max_hp=10)
+    healed = GameState(map_id=0, x=0, y=0, current_hp=10, max_hp=10)
+
+    reward.calculate(hurt, None, action=0)
+    reward.calculate(healed, hurt, action=0)
+
+    assert reward.last_rewards["heal"] == pytest.approx(5.0)
