@@ -46,6 +46,7 @@ def main() -> int:
     parser.add_argument("--seeds", nargs="+", type=int, default=[43, 44])
     parser.add_argument("--steps", type=int, default=20_000_000)
     parser.add_argument("--save-state", default=None)
+    parser.add_argument("--tag", default="", help="Session tag, e.g. _mod")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -56,7 +57,7 @@ def main() -> int:
     plan = []
     for tier in args.tiers:
         for seed in args.seeds:
-            session = Path("runs") / f"{tier}_{args.steps // 1_000_000}M_s{seed}"
+            session = Path("runs") / f"{tier}_{args.steps // 1_000_000}M{args.tag}_s{seed}"
             done = finished_steps(session / "checkpoints")
             plan.append((tier, seed, session, done))
 
