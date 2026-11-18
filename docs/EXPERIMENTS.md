@@ -89,27 +89,46 @@ is ~2.5-3 hours.
 **2M steps, T0 from `bulba_start`:** Route 1 in 2/5 episodes, Viridian City
 0/5, no badges.
 
-**20M steps, one training seed each, 5 evaluation seeds:**
+**20M steps, 3 training seeds x 5 evaluation episodes each (15 episodes per
+tier), all from `bulba_start`:**
 
-| tier | Viridian | Route 2 | Viridian Forest | Pewter | Route 22 | avg maps | badges |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| T0 pixels | 5/5 | 5/5 | 5/5 | **2/5** | 1/5 | 19.2 | 0 |
-| T1 +HP | 0/5 | 0/5 | 0/5 | 0/5 | 0/5 | 5.6 | 0 |
-| T2 all RAM | 5/5 | 5/5 | 5/5 | 0/5 | 3/5 | 13.6 | 0 |
+| tier | seed 42 | seed 43 | seed 44 | mean [min-max] |
+|---|---:|---:|---:|---|
+| T0 Viridian | 5/5 | 1/5 | 5/5 | 0.73 [0.20-1.00] |
+| T2 Viridian | 5/5 | 0/5 | 3/5 | 0.53 [0.00-1.00] |
+| T0 Viridian Forest | 5/5 | 0/5 | 5/5 | 0.67 [0.00-1.00] |
+| T2 Viridian Forest | 5/5 | 0/5 | 0/5 | 0.33 [0.00-1.00] |
+| T0 Pewter | 2/5 | 0/5 | 0/5 | 0.13 [0.00-0.40] |
+| T2 Pewter | 0/5 | 0/5 | 0/5 | 0.00 [0.00-0.00] |
 
-Entropy at 20M (max 2.08): T0 0.97, **T1 0.42**, T2 1.35.
+Pooled over all 15 episodes, with a two-sided Fisher exact test:
 
-Reading: the pixel-only tier went furthest, including one episode that bought
-a museum ticket in Pewter. T2 matched it through the forest but never reached
-Pewter. T1 collapsed to a near-deterministic policy, which is why it stalled.
+| milestone | T0 | T2 | p |
+|---|---:|---:|---:|
+| Route 1 | 15/15 | 14/15 | 1.00 |
+| Viridian City | 11/15 | 8/15 | 0.45 |
+| Viridian Forest | 10/15 | 5/15 | 0.14 |
+| Pewter City | 2/15 | 0/15 | 0.48 |
+| Route 22 | 1/15 | 5/15 | 0.17 |
 
-**Do not overclaim this.** One training seed per tier, and identical code has
-already produced 0/10 vs 10/10 on the same metric across seeds. The claim
-supported by this data is: *with one seed each, minimal observation is at
-least as good as RAM-rich observation.* It is not yet evidence that
-observation richness is worthless.
+**There is no detectable difference between pixels-only and all-RAM
+observation.** T0's mean is higher on the main path (Viridian, Forest,
+Pewter); T2's is higher on Route 22. Neither ordering clears the noise, and
+the within-tier spread is the dominant effect: T0's Viridian rate ranges from
+0.20 to 1.00 across seeds, T2's from 0.00 to 1.00. The closest call is
+Viridian Forest, 10/15 vs 5/15, and p=0.14 does not support a claim.
 
-Also still true: **zero badges**. Pewter City is not Brock. The reference
+This is a null result, and a useful one: minimal observation costs nothing
+measurable at 20M steps. It is *not* evidence that RAM observations are
+useless, for two reasons. T2's 2560-bit event vector may simply be unusable by
+an MLP of this size (CJBoey reports needing a modular network for comparable
+inputs), and a single 20M-step budget at 13% of the reference project's
+Gym-2 compute may be too early for the difference to show.
+
+T1 remains n=1: entropy collapsed to 0.42 nats and it never left Route 1. That
+looks like a policy pathology and is recorded, not explained.
+
+**Zero badges in all 30 episodes.** Pewter City is not Brock. The reference
 project needed ~150M steps for Gym 2, so 20M is roughly 13% of that.
 
 ## Next
