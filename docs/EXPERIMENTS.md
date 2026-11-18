@@ -156,3 +156,52 @@ Open questions:
   would make it a hyperparameter comparison rather than an observation one.
 - Is T2's 2,560-bit event vector usable by this MLP at all? CJBoey reports
   needing a modular network for comparable inputs.
+
+## Are the extra observations actually used?
+
+A null tier result only means something if the richer tier's policy uses the
+extra inputs. `scripts/probe_obs_sensitivity.py` collects real observations,
+randomises one component at a time, and measures how far the action
+distribution moves.
+
+250 transitions, T2 checkpoint (`model_20000768`), seed 42 and seed 44:
+
+| component | mean KL (s42 / s44) | top-1 action changed |
+|---|---|---|
+| map (48x48) | 18.9 / 12.0 | 96% / 36% |
+| screens | 1.63 / 0.22 | 78% / 50% |
+| events (2560 bits) | 0.0001 / 0.0002 | **0% / 0%** |
+| badges (8) | 0.0000 / 0.0000 | **0% / 0%** |
+| level (8) | 0.0000 / 0.0000 | **0% / 0%** |
+| health (1) | 0.0000 / 0.0000 | **0% / 0%** |
+| recent_actions (3) | 0.0001 / 0.0007 | **0% / 0%** |
+
+The control is T0, whose only input is screens: randomising it moves 93% of
+actions. So the probe detects genuine dependence.
+
+**Five of T2's seven inputs are ignored entirely.** T2 is effectively
+"pixels plus a map". The tier comparison therefore measured the encoder, not
+the value of RAM observations. It also explains T1: health is ignored, so its
+input is functionally identical to T0's, and its collapse was training
+variance rather than an observation effect.
+
+This matches CJBoey's report that a modular network is required for these
+inputs ("without this network architecture, the agent fails to learn anything
+when given the same observation").
+
+`kantorl.encoders.ModularExtractor` addresses it: one encoder per component
+(NatureCNN for screens, Linear/LayerNorm/Linear for each vector), fused to a
+fixed width so every tier presents the same capacity to the policy. It is now
+the default for new models; `create_policy_kwargs(modular=False)` restores the
+stock extractor. Checkpoints trained before this change continue to load with
+their own extractor.
+
+Not yet demonstrated: that training with the modular encoder actually makes
+the policy use the auxiliary inputs. That needs a run.
+
+## T1's collapse
+
+T1's single seed reached a final entropy of 0.42 nats (max 2.08) and never left
+Route 1. Given that health is one of the ignored inputs above, T1's input is
+functionally the same as T0's, so this is most likely a training pathology
+rather than an observation effect. Untested.

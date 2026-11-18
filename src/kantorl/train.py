@@ -99,6 +99,7 @@ from kantorl.callbacks import (
     WandbCallback,
 )
 from kantorl.config import KantoConfig
+from kantorl.encoders import ModularExtractor
 from kantorl.env import make_env
 from kantorl.obs import DEFAULT_OBS_COMPONENTS
 
@@ -111,7 +112,7 @@ if TYPE_CHECKING:
 # =============================================================================
 
 
-def create_policy_kwargs() -> dict:
+def create_policy_kwargs(modular: bool = True) -> dict:
     """
     Create the policy network architecture configuration.
 
@@ -149,10 +150,11 @@ def create_policy_kwargs() -> dict:
 
     Notes:
         - This is passed to PPO's policy_kwargs parameter
-        - stable-baselines3 handles the feature extractor automatically
-        - MultiInputPolicy uses NatureCNN for image observations
+        - With ``modular`` (the default) each observation key gets its own
+          encoder; see ``kantorl.encoders.ModularExtractor``. The stock
+          extractor was measured ignoring five of the seven components.
     """
-    return {
+    kwargs: dict = {
         # Network architecture specification
         # "pi" = policy network layers, "vf" = value function network layers
         "net_arch": {
@@ -163,6 +165,10 @@ def create_policy_kwargs() -> dict:
         # ReLU is standard, fast, and works well for most RL tasks
         "activation_fn": torch.nn.ReLU,
     }
+    if modular:
+        kwargs["features_extractor_class"] = ModularExtractor
+        kwargs["features_extractor_kwargs"] = {"features_dim": 512, "proj_dim": 64}
+    return kwargs
 
 
 # =============================================================================
