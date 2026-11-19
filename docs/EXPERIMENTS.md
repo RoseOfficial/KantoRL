@@ -265,3 +265,38 @@ for the exploit.
 
 Any run trained before this fix optimised the exploit and is not comparable.
 That includes `t2_pragmatic_mod_s42`.
+
+## Matched comparison: the modular encoder changes the answer
+
+Both tiers retrained with the same architecture, reward (`heal_weight=0`), start
+state and budget. Two training seeds per tier, five evaluation episodes each.
+
+| milestone | T0 pixels | T2 all RAM | Fisher p |
+|---|---:|---:|---:|
+| Route 1 | 5/10 | 10/10 | 0.033 |
+| Viridian City | **0/10** | **10/10** | 1.1e-05 |
+| Route 2 | 0/10 | 9/10 | 1.2e-04 |
+| Viridian Forest | 0/10 | 8/10 | 7.1e-04 |
+| Route 22 | 0/10 | 8/10 | 7.1e-04 |
+| badges | 0 | 0 | - |
+
+The stock-encoder comparison found no difference at all. With an encoder that
+can use its inputs, the RAM-rich tier reaches Viridian City in every episode
+while the pixel-only tier reaches it in none.
+
+Two things are worth separating:
+
+1. **The mean moved.** T2 reaches deeper milestones far more often.
+2. **The variance collapsed.** T2's two seeds are nearly identical
+   (5/5 and 5/5 to Viridian; 4/5 and 4/5 to the forest). T0's seeds disagree
+   completely (5/5 vs 0/5 on Route 1). Richer observation did not just raise
+   average performance, it made behaviour reproducible.
+
+That second point matters for the research question: an observation prior is
+worth more than its effect on the mean, because it also removes the run-to-run
+lottery that made earlier single-seed results meaningless.
+
+Caveats: two seeds per tier (n=10 episodes), no badges, and still only 13% of
+the compute the reference project needed for Gym 2. The effect on Viridian is
+large enough that more seeds would mainly tighten the estimate; the badge-level
+question remains open.
