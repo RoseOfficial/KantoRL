@@ -477,6 +477,15 @@ class DefaultReward:
     # 78% of total reward while the agent made no progress.
     heal_weight: float = 0.0
 
+    # Pay the healing reward only the first time HP is restored on a given map.
+    # Unbounded, it is farmable; removed entirely, it also removes the pull
+    # toward towns with a Pokemon Center. Bounded per map, it can do the latter
+    # without the former.
+    heal_once_per_map: bool = True
+
+    # Maps on which the healing reward has already been paid this episode
+    healed_maps: set = field(default_factory=set)
+
     # Potential of the level reward at the previous step (None until baselined)
     prev_level_potential: float | None = None
 
@@ -632,9 +641,17 @@ class DefaultReward:
             # Only reward HP increases (healing), not decreases (damage)
             if hp_ratio_now > hp_ratio_prev:
                 healing = hp_ratio_now - hp_ratio_prev
-                rewards["heal"] = self.reward_scale * self.heal_weight * healing * 10.0
-                # Track total healing for logging
+                # Track total healing for logging regardless of whether it paid.
                 self.total_healing += healing
+
+                already_paid = (
+                    self.heal_once_per_map and state.map_id in self.healed_maps
+                )
+                if not already_paid:
+                    rewards["heal"] = (
+                        self.reward_scale * self.heal_weight * healing * 10.0
+                    )
+                    self.healed_maps.add(state.map_id)
 
         # ---------------------------------------------------------------------
         # Badge Collection Reward
@@ -746,6 +763,7 @@ class DefaultReward:
         self.visited_coords.clear()
         self.visited_maps.clear()
         self.interacted_coords.clear()
+        self.healed_maps.clear()
         self.max_event_count = 0
         self.max_badges = 0
         self.baselined = False

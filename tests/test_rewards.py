@@ -263,3 +263,41 @@ def test_healing_pays_when_explicitly_enabled():
     reward.calculate(healed, hurt, action=0)
 
     assert reward.last_rewards["heal"] == pytest.approx(5.0)
+
+
+def test_healing_pays_once_per_map_when_bounded():
+    """Stops blackout farming while still pulling toward new centres."""
+    reward = DefaultReward(
+        reward_scale=1.0, explore_weight=0.0, heal_weight=1.0, heal_once_per_map=True
+    )
+    hurt = GameState(map_id=5, x=0, y=0, current_hp=5, max_hp=10)
+    healed = GameState(map_id=5, x=0, y=0, current_hp=10, max_hp=10)
+
+    reward.calculate(hurt, None, action=0)
+    reward.calculate(healed, hurt, action=0)
+    assert reward.last_rewards["heal"] == pytest.approx(5.0)
+
+    # Same map again: a second heal must not pay.
+    reward.calculate(hurt, healed, action=0)
+    reward.calculate(healed, hurt, action=0)
+    assert reward.last_rewards["heal"] == 0.0
+
+    # A new map pays again.
+    elsewhere = GameState(map_id=12, x=0, y=0, current_hp=10, max_hp=10)
+    reward.calculate(elsewhere, hurt, action=0)
+    assert reward.last_rewards["heal"] == pytest.approx(5.0)
+
+
+def test_unbounded_healing_still_pays_repeatedly_when_opted_in():
+    reward = DefaultReward(
+        reward_scale=1.0, explore_weight=0.0, heal_weight=1.0, heal_once_per_map=False
+    )
+    hurt = GameState(map_id=5, x=0, y=0, current_hp=5, max_hp=10)
+    healed = GameState(map_id=5, x=0, y=0, current_hp=10, max_hp=10)
+
+    reward.calculate(hurt, None, action=0)
+    reward.calculate(healed, hurt, action=0)
+    reward.calculate(hurt, healed, action=0)
+    reward.calculate(healed, hurt, action=0)
+
+    assert reward.last_rewards["heal"] == pytest.approx(5.0)
