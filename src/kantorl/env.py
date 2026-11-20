@@ -317,6 +317,7 @@ class KantoRedEnv(gym.Env):
                 reward_scale=self.config.reward_scale,
                 explore_weight=self.config.explore_weight,
                 interact_weight=self.config.interact_weight,
+                interact_once_per_run=self.config.interact_once_per_run,
                 stuck_penalty=self.config.stuck_penalty,
                 level_weight=self.config.level_weight,
                 heal_weight=self.config.heal_weight,

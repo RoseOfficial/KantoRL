@@ -83,6 +83,8 @@ class KantoConfig:
         gamma (float): Discount factor for future rewards.
         gae_lambda (float): GAE (Generalized Advantage Estimation) lambda.
         clip_range (float): PPO clipping parameter for policy updates.
+        target_kl (float | None): Per-update KL guard. SB3 stops an epoch when
+            approximate KL exceeds 1.5x this value. None disables the guard.
         ent_coef (float): Entropy coefficient for exploration.
         vf_coef (float): Value function loss coefficient.
         n_epochs (int): Number of epochs per PPO update.
@@ -207,6 +209,12 @@ class KantoConfig:
     # policy learns never to interact and never obtains a starter.
     interact_weight: float = 1.0
 
+    # Keep interaction novelty across episode resets. Off by default (historic
+    # behaviour: the set is cleared each episode). When on, each coordinate
+    # pays once per environment process for the whole run, which removes the
+    # per-episode farm that made Pallet Town's NPCs a local optimum.
+    interact_once_per_run: bool = False
+
     # Weight for the stuck penalty. Defaults to 0: the penalty fires in any
     # reward-free stretch, including the dialogue and menus that progress needs.
     stuck_penalty: float = 0.0
@@ -269,6 +277,13 @@ class KantoConfig:
     # 0.2 is the standard PPO default — allows sufficient policy updates
     # to break out of uniform-random initialization
     clip_range: float = 0.2
+
+    # Optional global trust-region guard. Clip range bounds each sample's
+    # ratio, not the size of the whole update: with 24 gradient steps per
+    # iteration the policy can still move far. When set, SB3 stops the epoch
+    # once approximate KL exceeds 1.5x this value. None keeps the historical
+    # behaviour, which let a single 0.093-KL update flatten the 100M gate run.
+    target_kl: float | None = None
 
     # Entropy coefficient for the loss function
     # Adds bonus for high-entropy (random) action distributions
@@ -491,6 +506,10 @@ class KantoConfig:
             raise ValueError(
                 f"interact_weight must be >= 0, got {self.interact_weight}. "
                 "A negative weight would punish pressing A."
+            )
+        if self.target_kl is not None and self.target_kl <= 0:
+            raise ValueError(
+                f"target_kl must be > 0 or None, got {self.target_kl}."
             )
         if self.stuck_penalty < 0:
             raise ValueError(

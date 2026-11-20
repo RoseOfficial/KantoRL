@@ -44,12 +44,19 @@ config:
   reward_scale: 0.5
   explore_weight: 0.3
   interact_weight: 1.0
+  # Interaction novelty persists across episodes. Per-episode it paid again
+  # every life, and the 100M gate settled into farming Pallet Town's NPCs.
+  interact_once_per_run: true
   stuck_penalty: 0.0
   level_weight: 1.0
   # Off: losing battles to black out and heal is farmable.
   heal_weight: 0.0
 
   gamma: 0.995
+  # Stop a PPO epoch once approximate KL exceeds 1.5x this. Clip range bounds
+  # each sample's ratio, not the whole update; a 0.093-KL update at 10M
+  # flattened the 100M gate run and it never recovered.
+  target_kl: 0.02
   # Full training-loop throughput on the reference machine (8C/16T): 32 envs at
   # 1,214 steps/s beats 16 envs at 951, because workers idle during the PPO
   # update and oversubscription fills that gap. 48 envs regresses to 1,135 on

@@ -341,3 +341,59 @@ differences in depth are suggestive, not established. Replicating the two arms
 is the obvious next step if that distinction matters.
 
 Still true everywhere: **zero badges**.
+
+## The 100M gate: an optimizer failure, not a capability ceiling
+
+One seed, 100M steps, `t2_pragmatic`, `bulba_start`, 16.3 hours. Result: zero
+badges, and the final policy could not reach Viridian City in 5/5 evaluation
+episodes. The 20M baseline of the same tier reaches Viridian 5/5 and the forest
+4/5.
+
+The run did not spend 100M steps failing to learn; it learned, broke, and then
+sat still:
+
+| step | approx_kl | clip fraction | entropy | unique coords |
+|---:|---:|---:|---:|---:|
+| 8,192 | 0.0105 | 0.031 | 2.07 | 15 |
+| 10,000,000 | **0.064** | **0.244** | 0.95 | 585 |
+| 25,000,000 | 5.2e-4 | 0.001 | 1.96 | 153 |
+| 50,000,000 | 8.8e-7 | 0.000 | 1.84 | 221 |
+| 100,000,000 | 1.6e-6 | 0.000 | 1.85 | 215 |
+
+`clip_range` bounds each sample's ratio, not the size of the whole update. At
+~10M the run took an update that peaked at 0.093 KL (8x the 0.011 measured on
+the 20M baseline at the same step). The policy first sharpened to entropy 0.95,
+then lost the behaviour entirely: by 25M entropy was 1.96 of a 2.08 maximum and
+KL had collapsed to 5e-4. A near-uniform policy cannot chain the ~50 actions
+needed to leave Pallet Town; with no directed behaviour it earns no reward, so
+the gradient stays near zero and the policy never sharpens again. 75M steps
+(~12 hours) produced nothing.
+
+Evaluating the run's own 10M checkpoint confirms the regression: Viridian 1/5,
+Route 2 1/5 at 10M, versus 0/5 for both at 100M. The final model farms Pallet
+Town house interactions (Town Map, Daisy) at steps 12k-16k.
+
+Three fixes, all harness changes rather than new game priors:
+
+1. **`target_kl: 0.02`** in every tier. SB3 stops an epoch once approximate KL
+   exceeds 1.5x this value. Off by default in `KantoConfig` so existing
+   checkpoints and configs keep their behaviour.
+2. **`first_seen.csv`**, written during training by `FirstSeenCallback`: the
+   step at which each badge and event flag first fires. Final-only evaluation
+   cannot distinguish a run that regressed from one that never progressed.
+   The nearest preceding checkpoint (every 100k) is the model that first
+   reached the milestone.
+3. **`interact_once_per_run: true`** in every tier. Interaction novelty used to
+   reset each episode, so Pallet Town's NPCs paid again every life -- the same
+   farmable pattern as the healing reward. It now pays once per position per
+   environment process.
+
+Caveat: this is one seed. Two runs with the same seed are not bit-identical
+(their 100k checkpoints differ), so the comparison is one draw against another,
+not a controlled replay. The internal signature -- a single oversized update
+followed by 75M steps of near-zero KL -- is what makes the diagnosis, not the
+seed count.
+
+Next: three seeds at 20M with the guard, scored on forest, Pewter and the three
+forest trainers. That is the current frontier: the 20M baseline enters the
+forest 4/5 and beats all three trainers in 1/5.

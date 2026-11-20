@@ -25,11 +25,18 @@ config:
   reward_scale: 0.5
   explore_weight: 0.3
   interact_weight: 1.0
+  # Interaction novelty persists across episodes. Per-episode it paid again
+  # every life, and the 100M gate settled into farming Pallet Town's NPCs.
+  interact_once_per_run: true
   stuck_penalty: 0.0
   level_weight: 1.0
   heal_weight: 0.0
 
   gamma: 0.995
+  # Stop a PPO epoch once approximate KL exceeds 1.5x this. Clip range bounds
+  # each sample's ratio, not the whole update; a 0.093-KL update at 10M
+  # flattened the 100M gate run and it never recovered.
+  target_kl: 0.02
   n_envs: 32
   enable_curriculum: false
   enable_agent: false

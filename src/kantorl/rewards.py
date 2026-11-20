@@ -461,6 +461,11 @@ class DefaultReward:
     # interact and never obtains a starter.
     interact_weight: float = 1.0
 
+    # Keep the interaction set across episode resets. Per-episode novelty is
+    # farmable: Pallet Town's NPCs paid again every life, and the 100M gate
+    # settled there instead of leaving town. Off by default for compatibility.
+    interact_once_per_run: bool = False
+
     # Weight for the stuck penalty. Defaults to 0 because the penalty fires in
     # any reward-free stretch, which includes productive dialogue and menus --
     # exactly the states the agent needs to spend time in.
@@ -762,7 +767,8 @@ class DefaultReward:
         """
         self.visited_coords.clear()
         self.visited_maps.clear()
-        self.interacted_coords.clear()
+        if not self.interact_once_per_run:
+            self.interacted_coords.clear()
         self.healed_maps.clear()
         self.max_event_count = 0
         self.max_badges = 0
@@ -967,6 +973,9 @@ class ExplorationReward:
     # Weight for the interaction-novelty reward (pressing A somewhere new)
     interact_weight: float = 1.0
 
+    # Keep interaction novelty across episode resets (see DefaultReward)
+    interact_once_per_run: bool = False
+
     # Set of (map_id, x, y) coordinates where A has been pressed this episode
     interacted_coords: set = field(default_factory=set)
 
@@ -1023,7 +1032,8 @@ class ExplorationReward:
         """Reset for new episode."""
         self.visited_coords.clear()
         self.visited_maps.clear()
-        self.interacted_coords.clear()
+        if not self.interact_once_per_run:
+            self.interacted_coords.clear()
         self.last_rewards = {}
 
     def get_info(self) -> dict:
@@ -1057,6 +1067,7 @@ def create_reward(
     reward_scale: float = 0.5,
     explore_weight: float = 0.1,
     interact_weight: float = 1.0,
+    interact_once_per_run: bool = False,
     stuck_penalty: float = 0.0,
     level_weight: float = 1.0,
     heal_weight: float = 0.0,
@@ -1115,10 +1126,15 @@ def create_reward(
             reward_scale=reward_scale,
             explore_weight=explore_weight,
             interact_weight=interact_weight,
+            interact_once_per_run=interact_once_per_run,
             stuck_penalty=stuck_penalty,
             level_weight=level_weight,
             heal_weight=heal_weight,
         )
     if name == "exploration":
-        return cls(reward_scale=reward_scale, interact_weight=interact_weight)
+        return cls(
+            reward_scale=reward_scale,
+            interact_weight=interact_weight,
+            interact_once_per_run=interact_once_per_run,
+        )
     return cls(reward_scale=reward_scale)

@@ -40,6 +40,7 @@ Dependencies:
 
 from __future__ import annotations
 
+import csv
 import os
 import time
 from pathlib import Path
@@ -219,6 +220,93 @@ class CumulativeCheckpointCallback(BaseCallback):
         # Find the checkpoint with the highest step count
         latest = max(checkpoints, key=get_steps)
         return latest, get_steps(latest)
+
+
+# =============================================================================
+# FIRST-SEEN MILESTONE CALLBACK
+# =============================================================================
+
+
+class FirstSeenCallback(BaseCallback):
+    """Write the training step at which each badge or event first fires.
+
+    Why this exists:
+        Final-checkpoint evaluation cannot distinguish a run that regressed
+        from one that never progressed. The 100M gate reached Viridian with
+        its 10M checkpoint and could not reach it at 100M, and nothing in the
+        session recorded that. It also makes "steps to badge N" a direct
+        output of training rather than a post-hoc checkpoint sweep.
+
+    Output:
+        ``<session>/first_seen.csv`` with columns step, kind, index, label.
+        The nearest preceding checkpoint (saved every 100k steps) is the model
+        that first reached the milestone, so a regression can be recovered by
+        evaluating that checkpoint instead of guessing.
+
+    Notes:
+        - Writes only first occurrences within the session, not per episode.
+        - Badges arrive as a count, so newly crossed badge numbers are expanded.
+        - Event indices are the game's own event-flag indices; labels come from
+          ``kantorl.env._load_milestones`` (generated from pret/pokered).
+    """
+
+    def __init__(self, session_path: Path | str, verbose: int = 0):
+        super().__init__(verbose)
+        self.session_path = Path(session_path)
+        self.csv_path = self.session_path / "first_seen.csv"
+        self._seen_events: set[int] = set()
+        self._max_badges = 0
+        self._milestone_map: dict[int, str] = {}
+        self._badge_labels: tuple[str, ...] = ()
+
+    def _on_training_start(self) -> None:
+        self.session_path.mkdir(parents=True, exist_ok=True)
+        if self.csv_path.exists():
+            # Resume support: reload what was already recorded, or a restarted
+            # run would append duplicate rows for the same milestone.
+            with self.csv_path.open(newline="", encoding="utf-8") as handle:
+                for row in csv.DictReader(handle):
+                    index = int(row["index"])
+                    if row["kind"] == "event":
+                        self._seen_events.add(index)
+                    elif row["kind"] == "badge":
+                        self._max_badges = max(self._max_badges, index)
+        else:
+            with self.csv_path.open("w", newline="", encoding="utf-8") as handle:
+                csv.writer(handle).writerow(["step", "kind", "index", "label"])
+
+        from kantorl.env import _load_milestones
+        from kantorl.milestones import BADGE_LABELS
+
+        self._milestone_map = _load_milestones()
+        self._badge_labels = BADGE_LABELS
+
+    def _record(self, kind: str, index: int, label: str) -> None:
+        with self.csv_path.open("a", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerow(
+                [self.num_timesteps, kind, index, label]
+            )
+        if self.verbose:
+            print(f"  FIRST {kind} {index}: {label} at {self.num_timesteps:,}")
+
+    def _on_step(self) -> bool:
+        for info in self.locals.get("infos", []):
+            badges = int(info.get("badges", 0) or 0)
+            if badges > self._max_badges:
+                for badge in range(self._max_badges + 1, badges + 1):
+                    label = self._badge_labels[badge - 1]
+                    self._record("badge", badge, label)
+                self._max_badges = badges
+
+            for index in info.get("new_event_indices", []):
+                if index not in self._seen_events:
+                    self._seen_events.add(index)
+                    self._record(
+                        "event",
+                        index,
+                        self._milestone_map.get(index, f"Event #{index}"),
+                    )
+        return True
 
 
 # =============================================================================

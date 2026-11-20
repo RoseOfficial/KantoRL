@@ -78,6 +78,30 @@ def test_interaction_tracking_is_cleared_between_episodes():
     assert reward.last_rewards["interact"] == pytest.approx(0.1)
 
 
+def test_interaction_tracking_can_persist_for_the_whole_run():
+    """Per-episode novelty is farmable; run-scoped novelty must not requeue it."""
+    reward = DefaultReward(
+        reward_scale=1.0, explore_weight=0.0, interact_once_per_run=True
+    )
+    here = state()
+
+    reward.calculate(here, None, action=ACTION_A)
+    reward.reset()
+    reward.calculate(here, None, action=ACTION_A)
+
+    assert reward.last_rewards["interact"] == 0.0
+
+
+def test_exploration_reward_can_keep_interaction_novelty_for_the_run():
+    reward = ExplorationReward(reward_scale=1.0, interact_once_per_run=True)
+
+    reward.calculate(state(), None, action=ACTION_A)
+    reward.reset()
+    reward.calculate(state(), None, action=ACTION_A)
+
+    assert reward.last_rewards["interact"] == 0.0
+
+
 def test_exploration_reward_also_pays_for_interaction():
     reward = ExplorationReward(reward_scale=1.0)
 

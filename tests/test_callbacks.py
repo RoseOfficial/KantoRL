@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from kantorl.callbacks import ThreadTuningCallback
+from kantorl.callbacks import FirstSeenCallback, ThreadTuningCallback
 
 
 @pytest.fixture(autouse=True)
@@ -70,3 +70,55 @@ def test_non_cpu_device_is_left_alone():
 
 def test_on_step_continues_training():
     assert make_callback()._on_step() is True
+
+
+# =============================================================================
+# FIRST-SEEN MILESTONES
+# =============================================================================
+
+
+def test_first_seen_writes_each_milestone_once(tmp_path):
+    callback = FirstSeenCallback(session_path=tmp_path)
+    callback._on_training_start()
+
+    callback.num_timesteps = 1_234
+    callback.locals = {
+        "infos": [{"badges": 1, "new_event_indices": [34, 35]}]
+    }
+    assert callback._on_step() is True
+
+    # Same event again, plus the second badge: only the badge is new.
+    callback.num_timesteps = 5_678
+    callback.locals = {
+        "infos": [{"badges": 2, "new_event_indices": [34]}]
+    }
+    assert callback._on_step() is True
+
+    rows = (tmp_path / "first_seen.csv").read_text().strip().splitlines()
+
+    assert rows[0] == "step,kind,index,label"
+    assert len(rows) == 5  # header + 2 events + 2 badges
+    assert rows[1] == "1234,badge,1,Boulder Badge"
+    assert rows[2].startswith("1234,event,34,")
+    assert rows[3].startswith("1234,event,35,")
+    assert rows[4] == "5678,badge,2,Cascade Badge"
+
+
+def test_first_seen_survives_a_restart(tmp_path):
+    """Resuming appends; it must not truncate the record of earlier progress."""
+    first = FirstSeenCallback(session_path=tmp_path)
+    first._on_training_start()
+    first.num_timesteps = 10
+    first.locals = {"infos": [{"badges": 0, "new_event_indices": [34]}]}
+    first._on_step()
+
+    resumed = FirstSeenCallback(session_path=tmp_path)
+    resumed._on_training_start()
+    resumed.num_timesteps = 20
+    resumed.locals = {
+        "infos": [{"badges": 1, "new_event_indices": [34]}]
+    }
+    resumed._on_step()
+
+    rows = (tmp_path / "first_seen.csv").read_text().strip().splitlines()
+    assert len(rows) == 3  # header + the event + the badge, no duplicates

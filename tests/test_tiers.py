@@ -66,11 +66,21 @@ def test_t1_and_t2_share_reward_and_horizon() -> None:
         "action_freq",
         "enable_curriculum",
         "enable_agent",
+        "target_kl",
+        "interact_once_per_run",
     ):
         if key in t1 or key in t2:
             assert t1.get(key) == t2.get(key), f"{key} differs between T1 and T2"
 
     assert set(t1["obs_components"]) < set(t2["obs_components"])
+
+
+def test_all_tiers_share_the_optimizer_guard_and_interaction_fix() -> None:
+    """These are harness settings, not observation priors: they must not differ."""
+    for name in BUILTIN_TIER_NAMES:
+        config = load_tier(name).config
+        assert config["target_kl"] == 0.02
+        assert config["interact_once_per_run"] is True
 
 
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:

@@ -92,6 +92,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 
 from kantorl.callbacks import (
     CumulativeCheckpointCallback,
+    FirstSeenCallback,
     PerformanceCallback,
     StallDetectionCallback,
     TensorboardCallback,
@@ -624,6 +625,8 @@ def train(
                 gae_lambda=config.gae_lambda,
                 # PPO clipping
                 clip_range=config.clip_range,
+                # Global trust-region guard; None keeps historic behaviour
+                target_kl=config.target_kl,
                 # Loss coefficients
                 ent_coef=config.ent_coef,
                 vf_coef=config.vf_coef,
@@ -657,6 +660,8 @@ def train(
                 gae_lambda=config.gae_lambda,  # GAE lambda (0.95)
                 # PPO clipping
                 clip_range=config.clip_range,  # Policy clip range (0.2)
+                # Global trust-region guard; None keeps historic behaviour
+                target_kl=config.target_kl,
                 # Loss coefficients
                 ent_coef=config.ent_coef,  # Entropy bonus (0.01 = mild exploration)
                 vf_coef=config.vf_coef,  # Value function coefficient (0.5)
@@ -690,6 +695,10 @@ def train(
         # Log game-specific metrics to TensorBoard
         # Tracks badges, events, exploration progress
         TensorboardCallback(log_freq=1000, session_path=session_path),
+        # Record the step at which each badge or event first fires. Final-only
+        # evaluation cannot tell a run that regressed from one that never
+        # progressed; this makes "steps to X" a direct output of training.
+        FirstSeenCallback(session_path=session_path),
         # Warn if training appears stalled
         # Detects when reward stops improving
         StallDetectionCallback(check_freq=50_000),

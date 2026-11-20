@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from kantorl.config import KantoConfig
 from kantorl.obs import DEFAULT_OBS_COMPONENTS
 from kantorl.tiers import load_tier
@@ -76,6 +78,21 @@ def test_tier_supplies_environment_and_ppo_settings() -> None:
     assert config.gamma == tier.config["gamma"]
     assert config.max_steps == tier.config["max_steps"]
     assert config.n_envs == tier.config["n_envs"]
+
+
+def test_tier_supplies_the_kl_guard_and_run_scoped_interactions() -> None:
+    tier = load_tier("t2_pragmatic")
+    config = resolve(base_config=tier.to_config("old.gb"))
+
+    assert config.target_kl == 0.02
+    assert config.interact_once_per_run is True
+
+
+def test_target_kl_must_be_positive_or_none() -> None:
+    with pytest.raises(ValueError, match="target_kl"):
+        KantoConfig(rom_path="pokemon_red.gb", target_kl=0)
+
+    assert KantoConfig(rom_path="pokemon_red.gb", target_kl=None).target_kl is None
 
 
 def test_paths_always_come_from_the_caller() -> None:
