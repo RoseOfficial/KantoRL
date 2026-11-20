@@ -127,16 +127,28 @@ def main() -> int:
 
             idle = idle_seconds()
             wanted = "idle" if idle >= args.idle_seconds else "active"
+            value = (
+                psutil.NORMAL_PRIORITY_CLASS
+                if wanted == "idle"
+                else psutil.BELOW_NORMAL_PRIORITY_CLASS
+            )
+
+            # Apply every tick, not only on a state change. Emulator workers are
+            # spawned in a burst at startup, and one created between ticks would
+            # otherwise keep whatever class it inherited.
+            changed = set_nice(procs, value)
+
             if wanted != state:
                 if wanted == "idle":
-                    changed = set_nice(procs, psutil.NORMAL_PRIORITY_CLASS)
                     print(f"[{time.strftime('%H:%M:%S')}] idle {idle:.0f}s "
                           f"-> NORMAL ({changed} processes)", flush=True)
                 else:
-                    changed = set_nice(procs, psutil.BELOW_NORMAL_PRIORITY_CLASS)
                     print(f"[{time.strftime('%H:%M:%S')}] active "
                           f"-> BELOW_NORMAL ({changed} processes)", flush=True)
                 state = wanted
+            elif changed:
+                print(f"[{time.strftime('%H:%M:%S')}] {wanted}: covered "
+                      f"{changed} new process(es)", flush=True)
             time.sleep(args.interval)
     finally:
         # Never leave a run throttled because the governor exited.
