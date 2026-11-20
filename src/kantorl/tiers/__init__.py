@@ -40,10 +40,16 @@ __all__ = [
 ]
 
 # Bundled tiers, ordered from fewest priors to most.
+#
+# The first three are the canonical ladder: they differ only in observation.
+# The last two are single-variable ablation arms used to locate *which*
+# observation carries an effect, not rungs of that ladder.
 BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t0_pure",
     "t1_minimal",
     "t2_pragmatic",
+    "t2_screens_map",
+    "t2_all_no_map",
 )
 
 # Keys allowed in the ``train`` section. These are loop-level arguments, not

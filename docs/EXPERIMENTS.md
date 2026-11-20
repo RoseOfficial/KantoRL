@@ -300,3 +300,44 @@ Caveats: two seeds per tier (n=10 episodes), no badges, and still only 13% of
 the compute the reference project needed for Gym 2. The effect on Viridian is
 large enough that more seeds would mainly tighten the estimate; the badge-level
 question remains open.
+
+## Which observation carries the effect?
+
+Four matched arms, same reward (`heal_weight=0`), start state, horizon and
+budget (20M). T0/T2 use two training seeds; the ablation arms one seed each.
+
+| milestone | pixels | screens+map | all-but-map | all seven |
+|---|---:|---:|---:|---:|
+| Viridian City | 0/10 | **5/5** | 2/5 | **10/10** |
+| Route 2 | 0/10 | 3/5 | 0/5 | 9/10 |
+| Viridian Forest | 0/10 | 2/5 | 0/5 | 8/10 |
+| Route 22 | 0/10 | 3/5 | 2/5 | 8/10 |
+| badges | 0 | 0 | 0 | 0 |
+
+Significance against the full tier on Viridian City:
+
+- pixels 0/10, p < 1e-4
+- screens+map 5/5, p = 1.00 (indistinguishable)
+- all-but-map 2/5, p = 0.022
+
+Reading:
+
+1. **The map is the single biggest contributor.** Adding it to pixels takes
+   Viridian from 0/10 to 5/5, matching the full tier. Nothing else tested does
+   that.
+2. **The map alone does not reproduce the full tier's depth.** Viridian Forest
+   2/5 versus 8/10, Route 2 3/5 versus 9/10. Neither gap is individually
+   significant at n=5, but the direction is consistent across both.
+3. **The RAM fields cannot substitute for the map.** Without it they reach
+   Viridian 2/5 but never Route 2 or the forest (0/5 each). Spatial memory
+   appears to be what makes navigation past the first route work at all.
+
+So the two groups are complementary rather than hierarchical: spatial memory
+enables reaching the second town, and the event/level/badge observations add
+depth beyond it. Neither subset alone matches the full tier.
+
+Caveat: the ablation arms are one training seed each (n=5 episodes), so the
+differences in depth are suggestive, not established. Replicating the two arms
+is the obvious next step if that distinction matters.
+
+Still true everywhere: **zero badges**.

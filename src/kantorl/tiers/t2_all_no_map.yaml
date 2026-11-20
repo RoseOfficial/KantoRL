@@ -1,0 +1,43 @@
+# Ablation arm: everything except the visited-tile map.
+#
+# The complement of t2_screens_map. If the map is what carries the full tier's
+# advantage, this arm should fall back toward screens alone despite having the
+# 2,560 event bits, badges, levels, HP and action history.
+name: t2_all_no_map
+
+description: >
+  All seven observations except the 48x48 map. Tests whether the RAM oracles
+  still help without spatial memory.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 20480
+  stagnation_steps: 10240
+  stagnation_reward: 1.0
+
+  # Identical to t2_pragmatic so observation is the only changed axis.
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  stuck_penalty: 0.0
+  level_weight: 1.0
+  heal_weight: 0.0
+
+  gamma: 0.995
+  n_envs: 32
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 42
