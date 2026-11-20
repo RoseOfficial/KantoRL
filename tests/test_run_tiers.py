@@ -47,3 +47,29 @@ def test_governor_is_skipped_when_the_script_is_missing(monkeypatch, tmp_path):
 def test_governor_is_a_subprocess_not_a_thread():
     """It must outlive the parent's blocked subprocess.run calls."""
     assert issubclass(run_tiers.subprocess.Popen, object)
+
+def test_training_command_streams_by_default(tmp_path):
+    from pathlib import Path
+
+    cmd = run_tiers.training_command(
+        "t0_pure", "rom.gb", Path("runs/x"), 1000, 42, "state.state",
+        True, "RoseOfficial", "#ff3300",
+    )
+
+    assert "--stream" in cmd
+    assert cmd[cmd.index("--stream-user") + 1] == "RoseOfficial"
+    assert cmd[cmd.index("--stream-color") + 1] == "#ff3300"
+    assert cmd[cmd.index("--save-state") + 1] == "state.state"
+
+
+def test_training_command_can_disable_streaming():
+    from pathlib import Path
+
+    cmd = run_tiers.training_command(
+        "t0_pure", "rom.gb", Path("runs/x"), 1000, 42, None,
+        False, "RoseOfficial", "#ff3300",
+    )
+
+    assert "--stream" not in cmd
+    assert "--save-state" not in cmd
+    assert cmd[0] and cmd[1:4] == ["-m", "kantorl", "tier"]

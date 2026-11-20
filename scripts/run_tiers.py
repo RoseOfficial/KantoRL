@@ -65,6 +65,41 @@ def start_governor(hours: float, idle_seconds: float) -> subprocess.Popen | None
     )
 
 
+def training_command(
+    tier: str,
+    rom_path: str,
+    session: Path,
+    steps: int,
+    seed: int,
+    save_state: str | None,
+    stream: bool,
+    stream_user: str,
+    stream_color: str,
+) -> list[str]:
+    """Command line for one tier run, including optional map streaming.
+
+    Streaming is part of the default path because it costs no measurable
+    throughput and makes a long sweep observable while it runs. It is still
+    possible to turn off, since it publishes to a shared public map.
+    """
+    cmd = [
+        sys.executable, "-m", "kantorl", "tier", "run", tier, rom_path,
+        "--session", str(session),
+        "--steps", str(steps),
+        "--seed", str(seed),
+        "--no-progress",
+    ]
+    if save_state:
+        cmd += ["--save-state", save_state]
+    if stream:
+        cmd += [
+            "--stream",
+            "--stream-user", stream_user,
+            "--stream-color", stream_color,
+        ]
+    return cmd
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom_path")
@@ -89,6 +124,21 @@ def main() -> int:
         type=float,
         default=120.0,
         help="Idle time before training returns to normal priority",
+    )
+    parser.add_argument(
+        "--no-stream",
+        action="store_true",
+        help="Do not broadcast to the shared map (default: stream)",
+    )
+    parser.add_argument(
+        "--stream-user",
+        default="RoseOfficial",
+        help="Display name on the shared map (default: RoseOfficial)",
+    )
+    parser.add_argument(
+        "--stream-color",
+        default="#ff3300",
+        help="Trail colour on the shared map (default: #ff3300)",
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -134,15 +184,17 @@ def main() -> int:
     started = time.perf_counter()
     try:
         for tier, seed, session, done in pending:
-            cmd = [
-                sys.executable, "-m", "kantorl", "tier", "run", tier, args.rom_path,
-                "--session", str(session),
-                "--steps", str(args.steps),
-                "--seed", str(seed),
-                "--no-progress",
-            ]
-            if args.save_state:
-                cmd += ["--save-state", args.save_state]
+            cmd = training_command(
+                tier,
+                args.rom_path,
+                session,
+                args.steps,
+                seed,
+                args.save_state,
+                not args.no_stream,
+                args.stream_user,
+                args.stream_color,
+            )
 
             print(f"\n=== {session} (seed {seed}) ===", flush=True)
             run_start = time.perf_counter()
