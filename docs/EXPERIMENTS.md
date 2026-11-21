@@ -397,3 +397,41 @@ seed count.
 Next: three seeds at 20M with the guard, scored on forest, Pewter and the three
 forest trainers. That is the current frontier: the 20M baseline enters the
 forest 4/5 and beats all three trainers in 1/5.
+
+## 20M with the guard: stable, but still short of the gym
+
+Two seeds finished 20M with `target_kl: 0.02` and run-scoped interaction
+novelty. Both produce the same phenotype:
+
+| milestone (eval, 5 episodes) | baseline `_mod_s42` | guard s42 | guard s43 |
+|---|---:|---:|---:|
+| Viridian City | 5/5 | 5/5 | 5/5 |
+| Route 2 | 4/5 | 5/5 | 5/5 |
+| Viridian Forest | 4/5 | 5/5 | 5/5 |
+| Pewter City | 0/5 | 1/5 | 1/5 |
+| Pewter Gym | 0/5 | 0/5 | 0/5 |
+| badges | 0 | 0 | 0 |
+
+Training-time `first_seen.csv` shows the agents got further than eval
+reproduces:
+
+| | s42 | s43 |
+|---|---:|---:|
+| all three forest trainers | 4.45M | 6.07M |
+| Bought Museum Ticket | 12.46M | 6.43M |
+| Route 22 rival (1st) | 12.45M | 15.60M |
+| Beat Pewter Gym Trainer 0 | 17.60M | 18.31M |
+
+Neither final policy reaches the gym in evaluation. Seed 42's one Pewter
+episode went to the museum, house and Pokémon Center; seed 43's went to Pewter
+House 2 and the Pokémon Center. Both are sightseeing, not the gym.
+
+Reading: `first_seen.csv` is a discovery log, not a capability measurement. A
+gym-trainer event in one of 32 training environments is real, but it does not
+mean the surrounding checkpoint can reproduce it. The final 20M policy reliably
+navigates to the forest and only rarely pushes into Pewter.
+
+The 20M phenotype is now consistent across seeds, which is itself a change: the
+pre-guard runs varied much more. The remaining gap is the gym and the leveling
+behind it, not exploration. The next step is to resume all three runs to 40M
+and see whether Pewter reliability and the gym follow.
