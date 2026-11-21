@@ -14,7 +14,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from kantorl.callbacks import FirstSeenCallback, ThreadTuningCallback
+from kantorl.callbacks import (
+    FirstSeenCallback,
+    TensorboardCallback,
+    ThreadTuningCallback,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -122,3 +126,22 @@ def test_first_seen_survives_a_restart(tmp_path):
 
     rows = (tmp_path / "first_seen.csv").read_text().strip().splitlines()
     assert len(rows) == 3  # header + the event + the badge, no duplicates
+
+
+def test_tensorboard_badge_max_is_all_time_not_windowed(tmp_path):
+    """Seed 44 earned a badge and the windowed metric still reported zero."""
+    callback = TensorboardCallback(log_freq=1000, session_path=tmp_path)
+
+    callback.num_timesteps = 1
+    callback.locals = {"infos": [{"badges": 1}]}
+    callback._on_step()
+    assert callback._max_badges_seen == 1
+
+    # Simulate the post-log clear, then a badge-free window.
+    callback.badges_collected.clear()
+    callback.num_timesteps = 2
+    callback.locals = {"infos": [{"badges": 0}]}
+    callback._on_step()
+
+    assert callback._max_badges_seen == 1
+    assert max(callback.badges_collected) == 0

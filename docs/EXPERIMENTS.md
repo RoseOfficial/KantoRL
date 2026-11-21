@@ -435,3 +435,47 @@ The 20M phenotype is now consistent across seeds, which is itself a change: the
 pre-guard runs varied much more. The remaining gap is the gym and the leveling
 behind it, not exploration. The next step is to resume all three runs to 40M
 and see whether Pewter reliability and the gym follow.
+
+## First badge: seed 44 at 14.9M -- earned once, not retained
+
+`first_seen.csv` for seed 44:
+
+| milestone | step |
+|---|---:|
+| Beat Viridian Forest Trainer 0 | 2,194,080 |
+| Beat Viridian Forest Trainer 1 | 2,484,864 |
+| Beat Viridian Forest Trainer 2 | 6,159,744 |
+| Bought Museum Ticket | 6,830,688 |
+| **Beat Brock** | **14,919,776** |
+| **Boulder Badge** | **14,921,952** |
+| Got TM34 | 14,921,952 |
+
+That is the first badge any configuration has earned, and it took 14.9M steps.
+But the final 20M checkpoint cannot reproduce it: Viridian 5/5, Route 2 2/5,
+Viridian Forest 2/5, Pewter 0/5, badges 0/5. It is the weakest of the three
+final policies, not the strongest.
+
+So the result is a **discovery, not a retained capability**. The policy found
+Brock mid-run, then drifted away from the behaviour before the budget ended.
+This is the same oscillation that made the 17.6M and 18.3M gym-trainer events
+unreproducible for seeds 42 and 43, now with a badge attached.
+
+One harness bug surfaced alongside it: `game/badges_max` was computed as the
+maximum of a buffer that is cleared at every log, so the metric reported 0 for
+the entire run even after the badge fired. It is now an all-time maximum, and
+`first_seen.csv` is the authoritative record either way.
+
+The three seeds now have a clean 20M midpoint:
+
+| eval (5 episodes) | s42 | s43 | s44 |
+|---|---:|---:|---:|
+| Viridian City | 5/5 | 5/5 | 5/5 |
+| Route 2 | 5/5 | 5/5 | 2/5 |
+| Viridian Forest | 5/5 | 5/5 | 2/5 |
+| Pewter City | 1/5 | 1/5 | 0/5 |
+| badges | 0 | 0 | 0 |
+| first badge during training | -- | -- | **14.9M** |
+
+Next: resume all three from 20M to 40M, unchanged, and evaluate both the final
+checkpoint and the first-badge checkpoint. If seed 44 stays regressed at 40M,
+more budget is not the fix; checkpoint retention or reward shape is.

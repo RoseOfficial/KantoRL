@@ -375,6 +375,11 @@ class TensorboardCallback(BaseCallback):
         # Full event tracking — persists entire training session
         # Union of all event flag bit indices seen across all envs, all time
         self._all_events_seen: set[int] = set()
+        # Highest badge count seen in any env, all time. The per-window buffer
+        # below is cleared at each log, so a badge earned mid-window vanished
+        # from the metric after the clear: seed 44 earned the Boulder Badge at
+        # 14.9M and TensorBoard still reported badges_max 0.
+        self._max_badges_seen: int = 0
         # Maps bit indices to human-readable names (loaded lazily on first step)
         self._milestone_map: dict[int, str] = {}
 
@@ -410,6 +415,7 @@ class TensorboardCallback(BaseCallback):
             # Not all steps have all metrics (only on episode boundaries)
             if "badges" in info:
                 self.badges_collected.append(info["badges"])
+                self._max_badges_seen = max(self._max_badges_seen, int(info["badges"]))
             if "events" in info:
                 self.events_triggered.append(info["events"])
             if "unique_coords" in info:
@@ -439,7 +445,8 @@ class TensorboardCallback(BaseCallback):
             # Log badge statistics
             # Mean shows typical performance, max shows best achieved
             self.logger.record("game/badges_mean", np.mean(self.badges_collected))
-            self.logger.record("game/badges_max", max(self.badges_collected))
+            # All-time max, not the window max: the buffer is cleared above.
+            self.logger.record("game/badges_max", self._max_badges_seen)
 
             # Log event and exploration statistics
             self.logger.record("game/events_mean", np.mean(self.events_triggered))
