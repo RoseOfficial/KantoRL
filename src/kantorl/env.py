@@ -909,6 +909,7 @@ class KantoRedEnv(gym.Env):
         """
         # Get current position
         map_id, x, y = memory.get_position(self.pyboy)
+        levels = tuple(memory.get_party_levels(self.pyboy))
 
         # Get reward function info (breakdown, stats, etc.)
         reward_info = self.reward_fn.get_info()
@@ -922,6 +923,8 @@ class KantoRedEnv(gym.Env):
             "events": self._last_event_count,
             "new_event_indices": self._new_event_indices,
             "party_count": memory.get_party_count(self.pyboy),
+            "level_sum": int(sum(levels)),
+            "max_level": int(max(levels, default=0)),
             "in_battle": memory.is_in_battle(self.pyboy),
             "explore_tiles": int(np.sum(self.explore_map > 0)),
             **reward_info,  # Merge reward function info

@@ -215,6 +215,8 @@ def make_report() -> MilestoneReport:
             events=4,
             explore_tiles=30,
             party_count=1,
+            level_sum=28,
+            max_level=22,
             first_steps={"event:0": 0, "event:3": 40, "badge:1": 90, "map:0": 0},
         ),
         EpisodeResult(
@@ -538,3 +540,13 @@ def test_init_block_still_ignored_when_it_arrives_after_reset():
     )
 
     assert not [k for k in tracker.first_steps if k.startswith("event:")]
+
+def test_episode_csv_includes_party_levels(tmp_path):
+    report = make_report()
+
+    path = write_episodes_csv(report, tmp_path / "episodes.csv")
+    rows = path.read_text().strip().splitlines()
+
+    assert "level_sum" in rows[0]
+    assert "max_level" in rows[0]
+    assert any(",28,22," in row for row in rows[1:])

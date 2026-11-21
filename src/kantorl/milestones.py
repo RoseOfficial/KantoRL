@@ -282,6 +282,8 @@ class EpisodeResult:
     events: int
     explore_tiles: int
     party_count: int
+    level_sum: int = 0
+    max_level: int = 0
     first_steps: dict[str, int] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -294,6 +296,8 @@ class EpisodeResult:
             "events": self.events,
             "explore_tiles": self.explore_tiles,
             "party_count": self.party_count,
+            "level_sum": self.level_sum,
+            "max_level": self.max_level,
             "first_steps": dict(self.first_steps),
         }
 
@@ -548,6 +552,8 @@ def evaluate_milestones(
                 events=int(info.get("events", 0) or 0),
                 explore_tiles=int(info.get("explore_tiles", 0) or 0),
                 party_count=int(info.get("party_count", 0) or 0),
+                level_sum=int(info.get("level_sum", 0) or 0),
+                max_level=int(info.get("max_level", 0) or 0),
                 first_steps=tracker.first_steps,
             )
             episodes.append(result)
@@ -623,6 +629,8 @@ _EPISODE_COLUMNS = (
     "events",
     "explore_tiles",
     "party_count",
+    "level_sum",
+    "max_level",
     "milestone_key",
     "milestone_kind",
     "milestone_label",
@@ -655,6 +663,8 @@ def write_episodes_csv(report: MilestoneReport, path: str | Path) -> Path:
                         "events": episode.events,
                         "explore_tiles": episode.explore_tiles,
                         "party_count": episode.party_count,
+                        "level_sum": episode.level_sum,
+                        "max_level": episode.max_level,
                         "milestone_key": key,
                         "milestone_kind": milestone.kind,
                         "milestone_label": milestone.label,
