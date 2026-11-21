@@ -479,3 +479,55 @@ The three seeds now have a clean 20M midpoint:
 Next: resume all three from 20M to 40M, unchanged, and evaluate both the final
 checkpoint and the first-badge checkpoint. If seed 44 stays regressed at 40M,
 more budget is not the fix; checkpoint retention or reward shape is.
+
+## 40M: navigation improves, the gym fight does not
+
+Final 40M evaluation (5 episodes each):
+
+| milestone | s42 | s43 | s44 |
+|---|---:|---:|---:|
+| Viridian City | 5/5 | 5/5 | 5/5 |
+| Route 2 | 5/5 | 5/5 | 2/5 |
+| Viridian Forest | 5/5 | 5/5 | 2/5 |
+| Pewter City | 1/5 | 1/5 | 0/5 |
+| badges | 0 | 0 | 0 |
+
+That is the same phenotype as 20M. But the finals hide a large oscillation:
+
+- seed 44 at **15M**: Pewter City 4/5, Pewter Gym 2/5
+- seed 44 at **37M**: Pewter City 5/5, Pewter Gym 5/5
+- seed 44 at **40M final**: Viridian Forest 2/5, Pewter City 0/5
+
+So the run contained a much better navigator at 37M than at 40M. More budget did
+not retain it.
+
+Larger evaluations of the two interesting checkpoints:
+
+| checkpoint | episodes | Pewter City | Pewter Gym | gym trainer beaten | badges |
+|---|---:|---:|---:|---:|---:|
+| 14.9M | 10 x 40k | 10/10 | 10/10 | 1/10 | 0/10 |
+| 37M | 20 x 20k | 18/20 | 18/20 | 1/20 | 0/20 |
+
+The agents reliably reach the gym and almost never win the fight. This is not
+navigation and not the evaluation budget.
+
+Party levels at episode end on the 37M checkpoint (5 episodes):
+
+| seed | steps | party | level_sum | max_level |
+|---:|---:|---:|---:|---:|
+| 0 | 20,000 | 2 | 8 | 8 |
+| 1 | 20,000 | 1 | 10 | 10 |
+| 2 | 20,000 | 3 | 28 | 22 |
+| 3 | 20,000 | 2 | 13 | 13 |
+| 4 | 20,000 | 2 | 8 | 8 |
+
+Brock's Onix is level 14. Most lives arrive at 8-13; one grinds to 22. The
+training badge at 14.9M was almost certainly that rare high-level run, which is
+why no checkpoint reproduces it reliably.
+
+Conclusion: the binding constraint is **leveling**, not exploration. The level
+reward exists but pays only `reward_scale * level_weight = 0.5` per level below
+15, against 4.0 per new event. The next experiment raises `level_weight` and
+measures whether the level distribution and gym win rate move.
+
+The level reward formula and the cap are unchanged; only its weight changes.
