@@ -1,0 +1,57 @@
+# Tier 2 with a stronger leveling incentive.
+#
+# Identical to t2_pragmatic in observation, horizon, and every reward term
+# except level_weight. This is a reward-axis experiment, not a new observation
+# tier.
+#
+# Evidence for the change: at 40M, the full tier reaches Pewter Gym 18/20 times
+# but beats the gym trainer 1/20 and Brock 0/20. Most lives end at party level
+# 8-13 against Onix at level 14. The old weight paid 0.5 per level below 15,
+# while a single new event paid 4.0 -- eight levels (the whole gap to Brock)
+# were worth one event.
+#
+# The potential is unchanged and still caps above level 15, so this raises the
+# pull toward the early levels without making late-game grinding dominant.
+name: t2_level4
+
+description: >
+  Full RAM-rich observation with level_weight 4.0. Same reward shape as
+  t2_pragmatic; only the price of a level changes.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 20480
+  stagnation_steps: 10240
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  # 2.0 per level below 15, against 0.5 at the default weight. Above 15 the
+  # potential still grows at a quarter rate, so the cap still binds.
+  level_weight: 4.0
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 42
