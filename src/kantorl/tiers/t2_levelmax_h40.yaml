@@ -1,0 +1,57 @@
+# Tier 2, max-level potential, and a horizon the policy can actually finish in.
+#
+# Identical to t2_levelmax except the episode length. Evidence for the change:
+# seed 43's final policy beats Brock in 7/10 lives at a 40k horizon, with a
+# median badge step of 23,038. Training truncated every episode at 20,480, so
+# the loop never saw most of those successful trajectories -- it was training
+# on a game that ended before the badge.
+#
+# max_steps doubles to 40,960 so the episode covers the observed badge time
+# with room to continue past Brock. The stagnation window doubles with it
+# (20,480) for the same reason: a productive but slow run should not be cut
+# before it reaches the gym.
+#
+# Everything else -- observation, reward, guard, interaction novelty -- is
+# unchanged from t2_levelmax.
+name: t2_levelmax_h40
+
+description: >
+  Max-level potential at weight 4.0 with a 40,960-step horizon. Same
+  observation and reward as t2_levelmax; only the episode length changes.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 40960
+  stagnation_steps: 20480
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 42

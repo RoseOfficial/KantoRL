@@ -92,6 +92,17 @@ def test_levelmax_tier_uses_the_max_level_source() -> None:
     assert config.obs_components == tuple(tier.config["obs_components"])
 
 
+def test_h40_tier_matches_levelmax_except_the_horizon() -> None:
+    base = load_tier("t2_levelmax").to_config("pokemon_red.gb")
+    h40 = load_tier("t2_levelmax_h40").to_config("pokemon_red.gb")
+
+    assert h40.max_steps == 40960
+    assert h40.stagnation_steps == 20480
+    assert h40.level_source == "max"
+    assert h40.level_weight == 4.0
+    assert h40.obs_components == base.obs_components
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])
