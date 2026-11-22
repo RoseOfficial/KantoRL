@@ -531,3 +531,35 @@ reward exists but pays only `reward_scale * level_weight = 0.5` per level below
 measures whether the level distribution and gym win rate move.
 
 The level reward formula and the cap are unchanged; only its weight changes.
+
+## Level weight 4.0: negative result
+
+Three seeds, 20M each, identical to the guard tier except `level_weight: 4.0`.
+
+| final eval (5 episodes) | s42 | s43 | s44 |
+|---|---:|---:|---:|
+| Viridian City | 4/5 | 0/5 | 0/5 |
+| Route 2 | 4/5 | 0/5 | 0/5 |
+| Viridian Forest | 2/5 | 0/5 | 0/5 |
+| Pewter City | 0/5 | 0/5 | 0/5 |
+| badges | 0 | 0 | 0 |
+
+Seed 42's levels were bimodal: episode maxima of 7, 37, 3, 22, 9. Seeds 43
+and 44 did not merely fail to level; they stopped playing. Every seed-44
+episode truncated at exactly 10,241 steps on 2 exploration tiles at level 6,
+and seed 43 ended at 10-20k steps on 2-9 tiles. Those are dead policies, not
+underlevelled ones.
+
+Why: the level potential is the **sum of party levels**, so catching a new
+Pokemon jumps it. At weight 4.0 a single catch can pay roughly 10 reward,
+against 4.0 for a new event. The logs show the corresponding instability:
+KL spikes to 0.08, value loss to 0.22, and the guard firing repeatedly. Two
+seeds collapsed; the third over-grinded and lost navigation.
+
+So the experiment did not test "pay more for leveling" cleanly: raising the
+weight also raised the catch bonus, which was never the intended signal.
+
+Conclusion: **do not use level_weight 4.0.** Revert to 1.0 for capability runs.
+If leveling is pursued again, the potential should key on the strongest party
+member's level (or the starter's), not the sum, so catching a Pokemon does not
+pay a windfall.
