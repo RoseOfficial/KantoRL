@@ -563,3 +563,59 @@ Conclusion: **do not use level_weight 4.0.** Revert to 1.0 for capability runs.
 If leveling is pursued again, the potential should key on the strongest party
 member's level (or the starter's), not the sum, so catching a Pokemon does not
 pay a windfall.
+
+## Max-level potential: first reliably reproducible badge
+
+`t2_levelmax` -- strongest party member, continuous curve, weight 4.0 -- at 20M,
+three seeds.
+
+20k evaluation:
+
+| milestone | s42 | s43 | s44 |
+|---|---:|---:|---:|
+| Viridian City | 5/5 | 5/5 | 5/5 |
+| Route 2 | 5/5 | 5/5 | 5/5 |
+| Viridian Forest | 5/5 | 5/5 | 5/5 |
+| Pewter City | 5/5 | 5/5 | 0/5 |
+| Pewter Gym | 4/5 | 5/5 | 0/5 |
+| Boulder Badge | 0/5 | **1/5** | 0/5 |
+
+Training `first_seen.csv`:
+
+| | s42 | s43 | s44 |
+|---|---:|---:|---:|
+| Beat Pewter Gym Trainer 0 | 14.77M | 10.14M | -- |
+| Beat Brock | 16.67M | 10.48M | -- |
+| Boulder Badge | 16.67M | 10.48M | -- |
+
+Two of three seeds earned a badge during training, and seed 43's final policy
+reproduces it. That is the first final-checkpoint badge in the project.
+
+### The 40k evaluation changes the number
+
+Ten episodes per seed, 40k steps each:
+
+| milestone | s42 | s43 |
+|---|---:|---:|
+| Pewter City | 10/10 | 10/10 |
+| Pewter Gym | 10/10 | 9/10 |
+| gym trainer beaten | 1/10 | **9/10** |
+| Beat Brock | 0/10 | **7/10** |
+| median badge step | -- | 23,038 |
+
+Seed 43's policy is a solo starter at level 13-15 and beats Brock in 70% of
+lives. Seed 42's lives often carry 2-4 Pokemon and reach level 26-34, but still
+lose the gym trainer; catching and overlevelling did not translate into the
+right battle.
+
+### Why the 20k numbers were low
+
+Training episodes truncate at `max_steps: 20480`. Seed 43's median badge step
+is 23,038 -- beyond the training horizon. The training loop never sees most of
+the successful trajectories, and the 20k evaluation was measuring a shorter
+game than the policy can play.
+
+So the max-level reward worked: no dead policies, a clean level signal, and a
+reproducible badge. The next constraint is the horizon, not the reward. Raise
+`max_steps` to 40,960 and `stagnation_steps` to 20,480 so training can see the
+badge and continue past it.
