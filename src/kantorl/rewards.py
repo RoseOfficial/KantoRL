@@ -176,6 +176,10 @@ class GameState:
     # Used by the level reward, which pays for levelling up
     level_sum: int = 0
 
+    # Highest level in the party. Opt-in level source: the sum pays a windfall
+    # when a new Pokemon is caught, while the max only moves when one levels.
+    max_level: int = 0
+
     # ===================
     # Episode Tracking
     # ===================
@@ -229,6 +233,9 @@ class GameState:
         # Used for healing rewards
         current_hp, max_hp = memory.get_total_party_hp(pyboy)
 
+        # One party read feeds both level sources
+        levels = memory.get_party_levels(pyboy)
+
         # Use pre-computed event count if provided, otherwise read from memory
         if event_count is None:
             event_count = memory.count_event_flags(pyboy)
@@ -241,7 +248,8 @@ class GameState:
             event_count=event_count,  # Total events triggered
             current_hp=current_hp,
             max_hp=max_hp,
-            level_sum=sum(memory.get_party_levels(pyboy)),
+            level_sum=sum(levels),
+            max_level=max(levels, default=0),
             step_count=step_count,
         )
 
@@ -471,11 +479,19 @@ class DefaultReward:
     # exactly the states the agent needs to spend time in.
     stuck_penalty: float = 0.0
 
-    # Weight for the level reward (sum of party levels, capped)
+    # Weight for the level reward (party-level potential, capped)
     # Without it the agent enters battles but never wins any: nothing pays for
     # levelling, and every gym is behind a level gap. PokeRL reports that
     # removing this reward caused their experiments to fail.
     level_weight: float = 1.0
+
+    # Which party statistic the level potential reads.
+    # "sum" keeps the original PokeRL formula. It pays a windfall when a
+    # Pokemon is caught, because the sum jumps. "max" reads the strongest
+    # party member, so catching something pays nothing and only levelling
+    # does. "max" also uses a continuous potential (no threshold jump) --
+    # see max_level_potential.
+    level_source: str = "sum"
 
     # Weight for the healing reward. Off by default: losing battles so the party
     # blacks out and is healed is farmable. Measured on a 20M run, healing was
@@ -508,6 +524,22 @@ class DefaultReward:
         if level_sum < 15:
             return float(level_sum)
         return 30.0 + (level_sum - 15) / 4.0
+
+    @staticmethod
+    def max_level_potential(max_level: int) -> float:
+        """Continuous single-Pokemon potential for level_source="max".
+
+        The PokeRL sum formula jumps from 14 to 30 when the sum crosses 15.
+        That jump is tolerable at the default weight but becomes a +32 reward
+        at weight 4.0, which collapsed two seeds. Reading the strongest party
+        member removes the catch windfall; making the curve continuous removes
+        the threshold windfall as well.
+
+        Levels below 15 are worth one point each; above 15, a quarter point.
+        """
+        if max_level < 15:
+            return float(max_level)
+        return 15.0 + (max_level - 15) / 4.0
 
     # ===================
     # Episode Tracking
@@ -696,10 +728,13 @@ class DefaultReward:
         # ---------------------------------------------------------------------
         # Level Reward
         # ---------------------------------------------------------------------
-        # Potential-based shaping on the party's level sum. The agent enters
-        # wild battles and wins none, because until this existed nothing paid
-        # for levelling -- and every gym sits behind a level gap.
-        potential = self.level_potential(state.level_sum)
+        # Potential-based shaping on party strength. The agent enters wild
+        # battles and wins none, because until this existed nothing paid for
+        # levelling -- and every gym sits behind a level gap.
+        if self.level_source == "max":
+            potential = self.max_level_potential(state.max_level)
+        else:
+            potential = self.level_potential(state.level_sum)
         if self.prev_level_potential is None:
             self.prev_level_potential = potential
         elif potential > self.prev_level_potential:
@@ -1070,6 +1105,7 @@ def create_reward(
     interact_once_per_run: bool = False,
     stuck_penalty: float = 0.0,
     level_weight: float = 1.0,
+    level_source: str = "sum",
     heal_weight: float = 0.0,
 ) -> RewardFunction:
     """
@@ -1129,6 +1165,7 @@ def create_reward(
             interact_once_per_run=interact_once_per_run,
             stuck_penalty=stuck_penalty,
             level_weight=level_weight,
+            level_source=level_source,
             heal_weight=heal_weight,
         )
     if name == "exploration":

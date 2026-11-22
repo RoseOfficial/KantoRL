@@ -224,6 +224,11 @@ class KantoConfig:
     # sits behind a level gap.
     level_weight: float = 1.0
 
+    # Which party statistic the level reward reads. "sum" is the historic
+    # PokeRL formula and pays a windfall when a Pokemon is caught. "max" reads
+    # the strongest party member, so only levelling moves it.
+    level_source: str = "sum"
+
     # Weight for the healing reward. Off by default: losing battles to black out
     # and be healed is farmable, and was 78% of an agent's reward while it made
     # no progress.
@@ -518,6 +523,10 @@ class KantoConfig:
         if self.level_weight < 0:
             raise ValueError(
                 f"level_weight must be >= 0, got {self.level_weight}."
+            )
+        if self.level_source not in ("sum", "max"):
+            raise ValueError(
+                f"level_source must be 'sum' or 'max', got {self.level_source!r}."
             )
         if self.heal_weight < 0:
             raise ValueError(

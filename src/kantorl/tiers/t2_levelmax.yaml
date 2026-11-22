@@ -1,0 +1,59 @@
+# Tier 2 with a clean, strong leveling incentive.
+#
+# Identical to t2_pragmatic in observation, horizon, and every reward term
+# except two related settings:
+#
+#   level_source: max   -- read the strongest party member, not the sum.
+#   level_weight: 4.0   -- 2.0 reward per level below 15.
+#
+# Why: with the sum, catching any Pokemon jumps the potential and can pay a
+# windfall. At weight 4.0 that windfall was about 10 reward and two seeds
+# collapsed during the first level-4 sweep. The max source ignores catches, and
+# its curve is continuous at 15 (the PokeRL sum formula jumps from 14 to 30,
+# which is +32 reward at this weight). This tier therefore prices levelling
+# itself rather than party size or a threshold.
+#
+# The potential still grows at a quarter rate above level 15, so the pull is
+# toward reaching Brock's level, not toward unbounded grinding.
+name: t2_levelmax
+
+description: >
+  Full RAM-rich observation with a max-level potential at weight 4.0. Same
+  observation and horizon as t2_pragmatic; only the level signal changes.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 20480
+  stagnation_steps: 10240
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 42

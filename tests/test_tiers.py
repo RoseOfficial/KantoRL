@@ -83,6 +83,15 @@ def test_all_tiers_share_the_optimizer_guard_and_interaction_fix() -> None:
         assert config["interact_once_per_run"] is True
 
 
+def test_levelmax_tier_uses_the_max_level_source() -> None:
+    tier = load_tier("t2_levelmax")
+    config = tier.to_config("pokemon_red.gb")
+
+    assert config.level_source == "max"
+    assert config.level_weight == 4.0
+    assert config.obs_components == tuple(tier.config["obs_components"])
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])

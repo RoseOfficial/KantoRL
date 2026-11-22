@@ -195,6 +195,45 @@ def test_level_potential_is_linear_then_capped():
     assert DefaultReward.level_potential(19) == pytest.approx(31.0)
 
 
+def test_max_level_potential_is_continuous_at_the_cap():
+    """The PokeRL sum formula jumps 14 -> 30; the max variant must not."""
+    assert DefaultReward.max_level_potential(14) == 14.0
+    assert DefaultReward.max_level_potential(15) == 15.0
+    assert DefaultReward.max_level_potential(16) == pytest.approx(15.25)
+    assert DefaultReward.max_level_potential(19) == pytest.approx(16.0)
+
+
+def test_max_level_source_does_not_pay_for_catching():
+    """A new Pokemon raises the sum but not the max, so it must pay zero."""
+    reward = DefaultReward(
+        reward_scale=1.0, explore_weight=0.0, level_source="max"
+    )
+
+    reward.calculate(
+        GameState(map_id=0, x=0, y=0, level_sum=10, max_level=10), None, action=0
+    )
+    reward.calculate(
+        GameState(map_id=0, x=0, y=0, level_sum=25, max_level=10), None, action=0
+    )
+
+    assert reward.last_rewards["level"] == 0.0
+
+
+def test_max_level_source_pays_for_the_strongest_member_levelling():
+    reward = DefaultReward(
+        reward_scale=1.0, explore_weight=0.0, level_source="max"
+    )
+
+    reward.calculate(
+        GameState(map_id=0, x=0, y=0, level_sum=10, max_level=10), None, action=0
+    )
+    reward.calculate(
+        GameState(map_id=0, x=0, y=0, level_sum=11, max_level=11), None, action=0
+    )
+
+    assert reward.last_rewards["level"] == pytest.approx(1.0)
+
+
 def test_first_step_does_not_pay_for_the_starting_levels():
     reward = DefaultReward(reward_scale=1.0, explore_weight=0.0)
 

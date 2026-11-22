@@ -95,6 +95,11 @@ def test_target_kl_must_be_positive_or_none() -> None:
     assert KantoConfig(rom_path="pokemon_red.gb", target_kl=None).target_kl is None
 
 
+def test_level_source_must_be_sum_or_max() -> None:
+    with pytest.raises(ValueError, match="level_source"):
+        KantoConfig(rom_path="pokemon_red.gb", level_source="average")
+
+
 def test_paths_always_come_from_the_caller() -> None:
     """A tier file cannot know where the ROM lives; the caller wins."""
     config = resolve(

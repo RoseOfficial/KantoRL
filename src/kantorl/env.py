@@ -320,6 +320,7 @@ class KantoRedEnv(gym.Env):
                 interact_once_per_run=self.config.interact_once_per_run,
                 stuck_penalty=self.config.stuck_penalty,
                 level_weight=self.config.level_weight,
+                level_source=self.config.level_source,
                 heal_weight=self.config.heal_weight,
             )
         else:
