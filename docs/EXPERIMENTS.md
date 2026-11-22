@@ -619,3 +619,32 @@ So the max-level reward worked: no dead policies, a clean level signal, and a
 reproducible badge. The next constraint is the horizon, not the reward. Raise
 `max_steps` to 40,960 and `stagnation_steps` to 20,480 so training can see the
 badge and continue past it.
+
+## 40k horizon: negative result on seed 42
+
+Seed 42 finished 20M with `max_steps: 40960`. Final evaluation, 10 episodes
+of 40k:
+
+| metric | result |
+|---|---:|
+| Pewter City | 0/10 |
+| Pewter Gym | 0/10 |
+| Boulder Badge | 0/10 |
+| events per episode | 15 |
+| exploration tiles | 18-28 |
+| party levels (max) | 17-44 |
+
+The policy grinds in the early routes and never leaves them. Compare the same
+seed at the 20k horizon: Pewter City 5/5, Pewter Gym 4/5. Longer episodes made
+it substantially worse.
+
+Why: a 40k episode gives the agent twice as long to farm the level reward
+before the episode ends. The above-15 potential still pays 0.5 per level at
+weight 4.0, and the agent can collect that in Route 1 indefinitely. The horizon
+change amplified the grind instead of letting the policy reach Brock.
+
+Conclusion: **do not lengthen episodes for this reward.** Keep `max_steps:
+20480`. The best configuration remains the 20k-horizon max-level tier, where
+seed 43's final policy beats Brock 7/10 at a 40k evaluation. The horizon
+mismatch is real, but fixing it by lengthening training episodes trades a
+measurement artifact for a much worse policy.
