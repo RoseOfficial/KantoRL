@@ -604,6 +604,15 @@ def train(
                 f"{config.resume_learning_rate:g}"
             )
 
+        # A loaded checkpoint carries its original logger, whose TensorBoard
+        # writer points at the directory the checkpoint was created in. Those
+        # directories are renamed as budgets grow (and may be pruned), so the
+        # writer can target a path that no longer exists and crash mid-run.
+        # Point the logger at the current session and let SB3 rebuild it.
+        model.tensorboard_log = str(session_path / "tensorboard")
+        model._custom_logger = False
+        model._logger = None
+
         # Calculate remaining steps (may be 0 if already completed)
         remaining_steps = max(0, total_timesteps - start_steps)
     else:
