@@ -753,3 +753,33 @@ alternative, not by replacing the final.
 This is the first reliable badge and the first reliable Route 3 in the project.
 The remaining wall is the last stretch of Route 3 and Mt. Moon: trainer 6 has
 been beaten in training but not in any evaluated episode.
+
+## 50M: the Route 3 trainer wall moves again
+
+50M final evaluation, 10 episodes of 40k:
+
+| milestone | result | median step |
+|---|---:|---:|
+| Boulder Badge | **10/10 (100%)** | 6,574 |
+| Beat Brock | 10/10 | 6,543 |
+| Route 3 | **10/10 (100%)** | 7,722 |
+| Route 3 trainer 0 | 9/10 | 11,322 |
+| Route 3 trainer 1 | 9/10 | 14,217 |
+| Route 3 trainer 2 | 8/10 | 17,626 |
+| Route 3 trainer 3 | 8/10 | 21,378 |
+| Route 3 trainer 4 | 7/10 | 23,302 |
+| Route 3 trainer 5 | 4/10 | 24,711 |
+| Route 3 trainer 6 | 7/10 | 23,609 |
+| Route 3 trainer 7 | 4/10 | 22,691 |
+
+Mt. Moon and Cerulean are still 0/10. The last two Route 3 trainers are the
+gate.
+
+Training `badges_mean` fell to 0.19 in the final log window, which looked like
+a regression. It was not: the final 50M policy is better than 40M on every
+Route 3 trainer and slightly faster to the badge. The windowed metric is
+misleading; the evaluation is the measurement.
+
+The retained `best_model` (Route 3 Trainer 7 at 49.91M) is also 10/10 on the
+badge but slower and weaker on trainers 2/5; the final checkpoint is the better
+artifact.
