@@ -103,6 +103,15 @@ def test_h40_tier_matches_levelmax_except_the_horizon() -> None:
     assert h40.obs_components == base.obs_components
 
 
+def test_lr1e4_tier_overrides_the_saved_rate_on_resume() -> None:
+    config = load_tier("t2_levelmax_lr1e4").to_config("pokemon_red.gb")
+
+    assert config.learning_rate == 1e-4
+    assert config.resume_learning_rate == 1e-4
+    assert config.level_source == "max"
+    assert config.max_steps == 20480
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])

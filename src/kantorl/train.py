@@ -592,6 +592,18 @@ def train(
         else:
             model = PPO.load(checkpoint_path, env=env)
 
+        # SB3 restores the checkpoint's optimizer and learning rate during
+        # load, so a gentler continuation has to be applied afterwards.
+        if config.resume_learning_rate is not None:
+            model.learning_rate = config.resume_learning_rate
+            model._setup_lr_schedule()
+            for group in model.policy.optimizer.param_groups:
+                group["lr"] = config.resume_learning_rate
+            print(
+                "Resume learning rate overridden to "
+                f"{config.resume_learning_rate:g}"
+            )
+
         # Calculate remaining steps (may be 0 if already completed)
         remaining_steps = max(0, total_timesteps - start_steps)
     else:

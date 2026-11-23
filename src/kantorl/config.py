@@ -80,6 +80,8 @@ class KantoConfig:
             Must divide evenly into n_envs * n_steps.
 
         learning_rate (float): Adam optimizer learning rate for PPO.
+        resume_learning_rate (float | None): LR applied after loading a
+            checkpoint, overriding the saved rate. None keeps the saved rate.
         gamma (float): Discount factor for future rewards.
         gae_lambda (float): GAE (Generalized Advantage Estimation) lambda.
         clip_range (float): PPO clipping parameter for policy updates.
@@ -264,6 +266,11 @@ class KantoConfig:
     # Learning rate for the Adam optimizer
     # 3e-4 is the standard PPO learning rate from the original paper
     learning_rate: float = 3e-4
+
+    # Optional learning-rate override applied after loading a checkpoint.
+    # SB3 restores the checkpoint's optimizer and LR, so a gentler continuation
+    # needs this rather than learning_rate. None keeps the checkpoint's rate.
+    resume_learning_rate: float | None = None
 
     # Discount factor (gamma) for future rewards
     # 0.995 gives an effective horizon of ~200 steps (~80 seconds game time).
@@ -515,6 +522,11 @@ class KantoConfig:
         if self.target_kl is not None and self.target_kl <= 0:
             raise ValueError(
                 f"target_kl must be > 0 or None, got {self.target_kl}."
+            )
+        if self.resume_learning_rate is not None and self.resume_learning_rate <= 0:
+            raise ValueError(
+                "resume_learning_rate must be > 0 or None, got "
+                f"{self.resume_learning_rate}."
             )
         if self.stuck_penalty < 0:
             raise ValueError(

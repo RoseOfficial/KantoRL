@@ -1,0 +1,58 @@
+# Continuation of the 31M Route 3 checkpoint at a gentler learning rate.
+#
+# The 40M extension that produced that checkpoint also showed the problem: the
+# same run at 35M had already lost Brock entirely. The policy is capable but
+# the updates are too large to retain it.
+#
+# This tier is t2_levelmax with one change: learning_rate 1e-4 instead of 3e-4.
+# SB3 restores the checkpoint's optimizer and learning rate on load, so
+# resume_learning_rate is the field that actually takes effect on a resumed
+# run; learning_rate is set too so a fresh run of this tier is consistent.
+#
+# Observation, reward, horizon, guard and interaction novelty are unchanged.
+# Best-checkpoint and per-badge snapshots are now written automatically, so
+# this continuation cannot lose the Route 3 policy it starts from.
+name: t2_levelmax_lr1e4
+
+description: >
+  t2_levelmax resumed at learning rate 1e-4. Same observation, reward and
+  horizon; gentler updates to retain the Route 3 policy.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 20480
+  stagnation_steps: 10240
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+  resume_learning_rate: 0.0001
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 40000000
+  reward_fn: default
+  seed: 43
