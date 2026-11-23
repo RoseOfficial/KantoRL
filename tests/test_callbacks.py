@@ -9,6 +9,7 @@ silently costs throughput -- so it is worth pinning down.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -145,3 +146,78 @@ def test_tensorboard_badge_max_is_all_time_not_windowed(tmp_path):
 
     assert callback._max_badges_seen == 1
     assert max(callback.badges_collected) == 0
+
+
+# =============================================================================
+# BEST-CHECKPOINT RETENTION
+# =============================================================================
+
+
+class _FakeEnv:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def save(self, path):
+        self.calls.append(("env", path))
+
+
+class _FakeModel:
+    def __init__(self):
+        self.calls = []
+        self.env = _FakeEnv(self.calls)
+
+    def save(self, path):
+        self.calls.append(("model", path))
+
+    def get_env(self):
+        return self.env
+
+
+def test_first_seen_saves_best_and_badge_snapshots(tmp_path):
+    callback = FirstSeenCallback(session_path=tmp_path)
+    callback.model = _FakeModel()
+    callback._on_training_start()
+
+    callback.num_timesteps = 1_234
+    callback.locals = {
+        "infos": [{"badges": 1, "new_event_indices": [34]}]
+    }
+    assert callback._on_step() is True
+
+    saved = [Path(path).name for kind, path in callback.model.calls if kind == "model"]
+    assert "badge_1_model.zip" in saved
+    assert "best_model.zip" in saved
+    assert (tmp_path / "checkpoints" / "badge_1_model_step.txt").exists()
+    assert (tmp_path / "checkpoints" / "best_model_step.txt").read_text().startswith(
+        "1234,"
+    )
+
+
+def test_first_seen_does_not_snapshot_on_duplicates(tmp_path):
+    callback = FirstSeenCallback(session_path=tmp_path)
+    callback.model = _FakeModel()
+    callback._on_training_start()
+
+    callback.num_timesteps = 10
+    callback.locals = {"infos": [{"badges": 0, "new_event_indices": [34]}]}
+    callback._on_step()
+    saves = len(callback.model.calls)
+
+    callback.num_timesteps = 20
+    callback.locals = {"infos": [{"badges": 0, "new_event_indices": [34]}]}
+    callback._on_step()
+
+    assert len(callback.model.calls) == saves
+
+
+def test_first_seen_snapshots_can_be_disabled(tmp_path):
+    callback = FirstSeenCallback(session_path=tmp_path, save_best=False)
+    callback.model = _FakeModel()
+    callback._on_training_start()
+
+    callback.num_timesteps = 10
+    callback.locals = {"infos": [{"badges": 1, "new_event_indices": [34]}]}
+    callback._on_step()
+
+    assert callback.model.calls == []
+    assert not (tmp_path / "checkpoints").exists()

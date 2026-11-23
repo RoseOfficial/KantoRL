@@ -47,6 +47,12 @@ def latest_checkpoint(run: Path) -> Path | None:
     return best
 
 
+def best_checkpoint(run: Path) -> Path | None:
+    """The model snapshot saved when the run last reached a new milestone."""
+    path = run / "checkpoints" / "best_model.zip"
+    return path if path.exists() else None
+
+
 def tier_of(run: Path) -> str:
     return re.sub(r"_s\d+$", "", run.name)
 
@@ -68,6 +74,11 @@ def main() -> int:
     parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2, 3, 4])
     parser.add_argument("--budget", type=int, default=20000)
     parser.add_argument("--save-state", default=None)
+    parser.add_argument(
+        "--best",
+        action="store_true",
+        help="Evaluate checkpoints/best_model.zip instead of the latest checkpoint",
+    )
     parser.add_argument("--skip-existing", action="store_true", default=True)
     parser.add_argument("--report-only", action="store_true")
     args = parser.parse_args()
@@ -81,13 +92,15 @@ def main() -> int:
 
     if not args.report_only:
         for run in runs:
-            out = run / "eval" / "milestones.json"
+            eval_dir = run / ("eval_best" if args.best else "eval")
+            out = eval_dir / "milestones.json"
             if args.skip_existing and out.exists():
                 print(f"skip {run.name} (eval exists)")
                 continue
-            checkpoint = latest_checkpoint(run)
+            checkpoint = best_checkpoint(run) if args.best else latest_checkpoint(run)
             if checkpoint is None:
-                print(f"skip {run.name} (no checkpoint)")
+                kind = "best_model" if args.best else "checkpoint"
+                print(f"skip {run.name} (no {kind})")
                 continue
 
             cmd = [
@@ -96,7 +109,7 @@ def main() -> int:
                 "--seeds", *[str(s) for s in args.seeds],
                 "--budget", str(args.budget),
                 "--stochastic",
-                "--out", str(run / "eval"),
+                "--out", str(eval_dir),
             ]
             if args.save_state:
                 cmd += ["--save-state", args.save_state]
@@ -106,7 +119,7 @@ def main() -> int:
     # ---------------------------------------------------------------- summary
     by_tier: dict[str, list[tuple[str, dict[str, int], int]]] = {}
     for run in runs:
-        path = run / "eval" / "milestones.json"
+        path = run / ("eval_best" if args.best else "eval") / "milestones.json"
         if not path.exists():
             continue
         report = json.loads(path.read_text(encoding="utf-8"))

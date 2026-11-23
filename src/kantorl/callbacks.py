@@ -239,25 +239,40 @@ class FirstSeenCallback(BaseCallback):
 
     Output:
         ``<session>/first_seen.csv`` with columns step, kind, index, label.
-        The nearest preceding checkpoint (saved every 100k steps) is the model
-        that first reached the milestone, so a regression can be recovered by
-        evaluating that checkpoint instead of guessing.
+        When a milestone is first recorded, the model that reached it is saved
+        to ``checkpoints/best_model.zip`` (overwritten as progress continues).
+        Each first badge is also snapshotted separately as
+        ``checkpoints/badge_<n>_model.zip`` and is never overwritten, so the
+        policy that first beat a gym leader survives later regressions.
+
+        The step and milestone behind each snapshot are written next to it as
+        ``<name>_step.txt``. VecNormalize statistics are saved beside the model
+        for resume; evaluation does not need them because ``norm_obs=False``.
 
     Notes:
         - Writes only first occurrences within the session, not per episode.
         - Badges arrive as a count, so newly crossed badge numbers are expanded.
         - Event indices are the game's own event-flag indices; labels come from
           ``kantorl.env._load_milestones`` (generated from pret/pokered).
+        - Snapshotting can be disabled with ``save_best=False``.
     """
 
-    def __init__(self, session_path: Path | str, verbose: int = 0):
+    def __init__(
+        self,
+        session_path: Path | str,
+        verbose: int = 0,
+        save_best: bool = True,
+    ):
         super().__init__(verbose)
         self.session_path = Path(session_path)
         self.csv_path = self.session_path / "first_seen.csv"
+        self.checkpoint_dir = self.session_path / "checkpoints"
+        self.save_best = save_best
         self._seen_events: set[int] = set()
         self._max_badges = 0
         self._milestone_map: dict[int, str] = {}
         self._badge_labels: tuple[str, ...] = ()
+        self._last_milestone: tuple[str, int, str] | None = None
 
     def _on_training_start(self) -> None:
         self.session_path.mkdir(parents=True, exist_ok=True)
@@ -286,17 +301,46 @@ class FirstSeenCallback(BaseCallback):
             csv.writer(handle).writerow(
                 [self.num_timesteps, kind, index, label]
             )
+        self._last_milestone = (kind, index, label)
         if self.verbose:
             print(f"  FIRST {kind} {index}: {label} at {self.num_timesteps:,}")
 
+    def _save_snapshot(self, stem: str) -> None:
+        """Save the current policy and the milestone that justified it."""
+        model = getattr(self, "model", None)
+        if not self.save_best or self._last_milestone is None or model is None:
+            return
+
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        model.save(str(self.checkpoint_dir / f"{stem}.zip"))
+
+        # Reward normalization matters for resume; observation normalization is
+        # off, so evaluation can load the model without these stats.
+        env = model.get_env()
+        if env is not None and hasattr(env, "save"):
+            env.save(str(self.checkpoint_dir / f"{stem}_vecnormalize.pkl"))
+
+        kind, index, label = self._last_milestone
+        (self.checkpoint_dir / f"{stem}_step.txt").write_text(
+            f"{self.num_timesteps},{kind},{index},{label}\n", encoding="utf-8"
+        )
+        if self.verbose:
+            print(f"  SAVED {stem} at {self.num_timesteps:,} ({kind} {index})")
+
     def _on_step(self) -> bool:
+        changed = False
+
         for info in self.locals.get("infos", []):
             badges = int(info.get("badges", 0) or 0)
             if badges > self._max_badges:
                 for badge in range(self._max_badges + 1, badges + 1):
                     label = self._badge_labels[badge - 1]
                     self._record("badge", badge, label)
+                    # A badge snapshot is never overwritten: later training can
+                    # lose the capability, as seed 43's 40M final did.
+                    self._save_snapshot(f"badge_{badge}_model")
                 self._max_badges = badges
+                changed = True
 
             for index in info.get("new_event_indices", []):
                 if index not in self._seen_events:
@@ -306,6 +350,10 @@ class FirstSeenCallback(BaseCallback):
                         index,
                         self._milestone_map.get(index, f"Event #{index}"),
                     )
+                    changed = True
+
+        if changed:
+            self._save_snapshot("best_model")
         return True
 
 

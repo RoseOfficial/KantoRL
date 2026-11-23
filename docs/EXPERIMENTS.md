@@ -674,3 +674,26 @@ final policy that beats Brock in 70% of evaluated lives at a 40k horizon.
 Do not extend it further. Future work should either preserve the best
 checkpoint automatically or stabilize the policy so the capability survives to
 the endpoint; adding steps without either just loses it.
+
+## Best-checkpoint retention
+
+`FirstSeenCallback` now snapshots the policy when it reaches a new milestone:
+
+- `checkpoints/best_model.zip` -- overwritten whenever a new event or badge is
+  first seen, with `best_model_step.txt` naming the step and milestone.
+- `checkpoints/badge_<n>_model.zip` -- saved at the first n-th badge and **never
+  overwritten**, so the policy that first beat a gym leader survives later
+  regressions.
+- Matching `_vecnormalize.pkl` files for resume. Evaluation does not need them:
+  `norm_obs=False`, so only reward normalization is included.
+
+Evaluate the best snapshot with:
+
+    python scripts/eval_runs.py "rom.gb" --runs "runs/<tier>_s*" --best ...
+
+which writes `eval_best/` instead of overwriting `eval/`.
+
+Why this exists: the 20M seed-43 policy beats Brock 7/10, while the same run at
+40M beats him 0/10. Nothing preserved the 20M peak, so extending the run
+destroyed the best model the project had. Retention is now automatic; adding
+steps no longer risks losing the policy that earned the badge.
