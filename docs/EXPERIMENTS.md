@@ -783,3 +783,25 @@ misleading; the evaluation is the measurement.
 The retained `best_model` (Route 3 Trainer 7 at 49.91M) is also 10/10 on the
 badge but slower and weaker on trainers 2/5; the final checkpoint is the better
 artifact.
+
+## 60M: the cap binds, and retention saves the peak
+
+60M final evaluation, 10 episodes of 40k:
+
+| milestone | 50M final | 60M final | retained best (49.91M) |
+|---|---:|---:|---:|
+| Boulder Badge | 10/10, 6,574 | 9/10, 18,796 | **10/10, 7,333** |
+| Route 3 | 10/10 | 9/10 | 10/10 |
+| Route 3 trainer 3 | 80% | 80% | 80% |
+| Route 3 trainer 5 | 40% | **80%** | 10% |
+| Route 3 trainer 6 | 0% | 0% | **50%** |
+| Route 3 trainer 7 | 0% | 0% | **50%** |
+
+The 60M final regressed on badge speed and lost trainers 6/7; the retention
+snapshot is the better artifact. Trainers 6 and 7 have median first steps of
+28,917 and 29,210 in the best model -- above the 20,480 training cap. Training
+only sees the rare attempts that reach them before truncation.
+
+This is the trigger agreed for the horizon change: raise `max_steps` to
+40,960, keep the 1e-4 learning rate, and seed from the retained best rather
+than the regressed final. Mt. Moon and Cerulean remain 0/10.
