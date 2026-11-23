@@ -721,3 +721,35 @@ Route 3 events first fire.
 For "furthest progress", 31M is the new frontier: 3/10 Brock and 3/10 Route 3,
 with all three Route 3 trainers beaten in those lives. For "fewest steps to
 badge 1", 20M remains the answer at 7/10.
+
+## Lower learning rate: 100% Brock and 100% Route 3
+
+Resumed seed 43 from the 31M Route 3 checkpoint at 1e-4 for 9M steps
+(`t2_levelmax_lr1e4`). Final 40M evaluation, 10 episodes of 40k:
+
+| milestone | result | median step |
+|---|---:|---:|
+| Boulder Badge | **10/10 (100%)** | 6,748 |
+| Beat Brock | 10/10 | 6,717 |
+| Pewter Gym trainer | 10/10 | 6,748 |
+| Pewter City | 10/10 | 3,121 |
+| Route 3 | **10/10 (100%)** | 7,852 |
+| Route 3 trainer 0 | 7/10 | 15,866 |
+| Route 3 trainer 1 | 5/10 | 33,469 |
+| Route 3 trainer 2 | 6/10 | 35,899 |
+| Route 3 trainer 6 | 0/10 in eval | first seen at 38.2M |
+
+Training `badges_mean` rose to 0.75 by the end of the run, and the learning
+rate stayed at 1e-4 throughout. The lower rate did not merely retain the Route
+3 policy: it made the badge reliable and cut the median badge step from 23,038
+at 31M to 6,748 here.
+
+The retained `best_model.zip` (saved when Route 3 trainer 6 was first beaten at
+38.2M) is also 10/10 on the badge, but slower (median 12,454) and weaker on
+Route 3 trainers 1 and 2 (30% and 10% versus 50% and 60%). The final 40M
+checkpoint is the better policy; retention did its job by preserving the
+alternative, not by replacing the final.
+
+This is the first reliable badge and the first reliable Route 3 in the project.
+The remaining wall is the last stretch of Route 3 and Mt. Moon: trainer 6 has
+been beaten in training but not in any evaluated episode.
