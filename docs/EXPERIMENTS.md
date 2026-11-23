@@ -697,3 +697,27 @@ Why this exists: the 20M seed-43 policy beats Brock 7/10, while the same run at
 40M beats him 0/10. Nothing preserved the 20M peak, so extending the run
 destroyed the best model the project had. Retention is now automatic; adding
 steps no longer risks losing the policy that earned the badge.
+
+## Checkpoint frontier: 31M reaches Route 3
+
+Evaluating the 40M extension's mid-run checkpoints at 40k x 10 episodes:
+
+| checkpoint | Pewter | Pewter Gym | gym trainer | Brock | Route 3 | Route 3 trainers |
+|---|---:|---:|---:|---:|---:|---:|
+| 20M | 10/10 | 9/10 | 9/10 | **7/10** | 0/10 | 0/10 |
+| 26M | 10/10 | 10/10 | **10/10** | 4/10 | 2/10 | 0/10 |
+| **31M** | 6/10 | 6/10 | 4/10 | 3/10 | **3/10** | **3/10 each** |
+| 35M | 10/10 | 9/10 | 1/10 | 0/10 | 0/10 | 0/10 |
+
+No single checkpoint dominates. The 20M policy is the badge-1 specialist; the
+26M policy clears the gym trainer most reliably; the 31M policy is the first to
+reach Route 3 and beat all three Route 3 trainers in evaluation.
+
+This is the oscillation in checkpoint form. The 40M run did contain a better
+post-Brock policy than the 20M run -- it just did not survive to the endpoint.
+`best_model.zip` now captures exactly this kind of mid-run peak when the
+Route 3 events first fire.
+
+For "furthest progress", 31M is the new frontier: 3/10 Brock and 3/10 Route 3,
+with all three Route 3 trainers beaten in those lives. For "fewest steps to
+badge 1", 20M remains the answer at 7/10.
