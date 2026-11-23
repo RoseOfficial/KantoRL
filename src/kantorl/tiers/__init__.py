@@ -44,8 +44,8 @@ __all__ = [
 # The first three are the canonical ladder: they differ only in observation.
 # The next two are single-variable ablation arms used to locate *which*
 # observation carries an effect, not rungs of that ladder. t2_level4,
-# t2_levelmax, t2_levelmax_h40 and t2_levelmax_lr1e4 are reward/horizon/optimizer
-# variants: same observation as t2_pragmatic.
+# t2_levelmax, t2_levelmax_h40, t2_levelmax_lr1e4 and t2_levelmax_h40_lr1e4 are
+# reward/horizon/optimizer variants: same observation as t2_pragmatic.
 BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t0_pure",
     "t1_minimal",
@@ -56,6 +56,7 @@ BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t2_levelmax",
     "t2_levelmax_h40",
     "t2_levelmax_lr1e4",
+    "t2_levelmax_h40_lr1e4",
 )
 
 # Keys allowed in the ``train`` section. These are loop-level arguments, not
