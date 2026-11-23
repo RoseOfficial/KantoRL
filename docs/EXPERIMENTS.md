@@ -648,3 +648,29 @@ Conclusion: **do not lengthen episodes for this reward.** Keep `max_steps:
 seed 43's final policy beats Brock 7/10 at a 40k evaluation. The horizon
 mismatch is real, but fixing it by lengthening training episodes trades a
 measurement artifact for a much worse policy.
+
+## 40M extension: seed 43 regressed from its 20M peak
+
+The 20M final of seed 43 is the best policy in the project: Brock 7/10 at a 40k
+evaluation. Extending that same run to 40M destroyed it.
+
+| checkpoint | Pewter City | Pewter Gym | Brock | badge |
+|---|---:|---:|---:|---:|
+| 20M | 10/10 | 9/10 | **7/10** | 7/10 |
+| 40M | 10/10 | 6/10 | **0/10** | 0/10 |
+
+Training did pass Brock between the two: `first_seen.csv` records Route 3
+trainers beaten at 25.8M and 30.4M. The capability existed mid-run and was gone
+by the endpoint.
+
+So more training made the best policy worse. The bottleneck is **checkpoint
+retention**, not budget. The 20M checkpoint remains at
+
+    runs/t2_levelmax_40M_lvlmax_s43/checkpoints/model_20000768.zip
+
+(the session was renamed when it was extended). That is the deliverable: a
+final policy that beats Brock in 70% of evaluated lives at a 40k horizon.
+
+Do not extend it further. Future work should either preserve the best
+checkpoint automatically or stabilize the policy so the capability survives to
+the endpoint; adding steps without either just loses it.
