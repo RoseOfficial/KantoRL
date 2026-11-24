@@ -1,0 +1,55 @@
+# Gamma probe after the B2F navigation trace.
+#
+# The 99M policy uses gamma 0.995, an effective horizon of ~200 steps. The B2F
+# loops span ~1,000 steps and the fossil room is ~30k steps into the episode,
+# so distant consequences are discounted almost completely. Boey's baseline
+# uses 0.999 early and 0.9996 later.
+#
+# Keep the observation and reward at the 99M baseline and change only gamma
+# (0.995 -> 0.999) and the continuation rate (2e-5). The 99M checkpoint is
+# saved with gamma 0.999 so PPO.load restores the new value target.
+name: t2_levelmax_h60_lr2e5_g999
+
+description: >
+  99M continuation with gamma 0.999 and a 2e-5 rate. Same observation,
+  reward and horizon; tests whether a longer credit horizon breaks the B2F
+  loop without adding a hand-authored rule.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.999
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.00002
+  resume_learning_rate: 0.00002
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 104000000
+  reward_fn: default
+  seed: 43

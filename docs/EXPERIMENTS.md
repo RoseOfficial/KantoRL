@@ -1089,3 +1089,11 @@ rule: raise gamma from 0.995 to 0.999 on the 99M policy. The current effective
 horizon is ~200 steps, while the B2F loops span thousands; Boey uses
 0.999/0.9996. If that fails, the next step is the minimal observation prior
 (the player marker), not the full Boey minimap.
+
+## 104M gamma probe: development
+
+Started from 99M with gamma 0.999 and a 2e-5 rate. The effective horizon moves
+from ~200 to ~1,000 steps; the B2F loops span ~1,000. Observation, reward and
+horizon are unchanged. This is a method setting, not a new hand-authored rule;
+the checkpoint's gamma is saved as 0.999 so PPO.load restores it. Seeds 0-9
+remain the development set. Result pending.

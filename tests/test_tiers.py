@@ -170,6 +170,20 @@ def test_reward_balance_tier_changes_only_reward_and_rate() -> None:
             assert rew[key] == value
 
 
+def test_gamma_probe_changes_only_gamma_and_rate() -> None:
+    base = load_tier("t2_levelmax_h60_lr5e5").config
+    gamma = load_tier("t2_levelmax_h60_lr2e5_g999").config
+
+    assert gamma["obs_components"] == base["obs_components"]
+    assert gamma["gamma"] == 0.999
+    assert gamma["learning_rate"] == 2e-5
+    assert gamma["resume_learning_rate"] == 2e-5
+    changed = {"gamma", "learning_rate", "resume_learning_rate"}
+    for key, value in base.items():
+        if key not in changed:
+            assert gamma[key] == value
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])
