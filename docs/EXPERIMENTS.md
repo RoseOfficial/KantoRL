@@ -1022,3 +1022,33 @@ TensorBoard) is observational: the waves change several things at once and
 start from different checkpoints. It can identify which changes coincided with
 progress, not prove which prior was load-bearing. The clean run is the causal
 claim.
+
+## 104M local map: one transient event, broad regression
+
+The 5M fine-tune (99M -> 104M, 5e-5, 61,440) added a 15x15 visited-tile
+window centered on the player. Training produced one new first-seen event:
+`Beat Mt. Moon 3 Trainer 3` at 102,831,968, and `best_model` saved that
+checkpoint.
+
+Ten-seed evaluation, 61,440 steps, `bulba_start`:
+
+| checkpoint | Boulder | Route 3 | Mt. Moon 3 t2 | Mt. Moon B2F | Trainer 3 |
+|---|---:|---:|---:|---:|---:|
+| 99M baseline | **10/10** | 10/10 | **9/10** | **10/10** | 0/10 |
+| 104M final | 9/10 | 9/10 | 1/10 | 7/10 | 0/10 |
+| 102.83M best | 9/10 | 9/10 | 0/10 | 0/10 | 0/10 |
+
+The event was a training-only transient: the event-time `best_model` does not
+reach Mt. Moon from a fresh start, and the final checkpoint regressed broadly.
+The local-map fusion head grew 8x (norm 0.18 -> 1.61), but the first encoder
+layer barely moved (21.21 -> 21.25), so the policy learned a small linear
+readout of mostly-random local features while the underlying policy drifted.
+At 5e-5 the fine-tune was destructive, the same pattern as the 80M and 100M
+late collapses.
+
+The 99M checkpoint remains the best artifact. The local map is not ruled out
+as an observation, but this fine-tune is a negative result; the next probe
+should change the reward balance, not add more map detail. The trace showed
+the policy grinding wild battles on B2F while the event reward is 8.0 and the
+per-tile exploration reward is 0.015, so lowering `level_weight` and raising
+`explore_weight` is the cheaper next test.

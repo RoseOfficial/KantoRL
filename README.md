@@ -49,6 +49,10 @@ Seeds 0-9 are used for development; seeds 10-19 are reserved for the final
 fixed-ruleset measurement. The clean from-scratch run, not the best intermediate
 checkpoint, is the headline sample-efficiency result.
 
+A 5M local-map fine-tune from 99M (104M) produced one transient Mt. Moon
+event but regressed from fresh starts (9/10 badge, Mt. Moon 3 t2 1/10, B2F
+7/10); the 99M checkpoint remains the best.
+
 
 ## Setup
 
