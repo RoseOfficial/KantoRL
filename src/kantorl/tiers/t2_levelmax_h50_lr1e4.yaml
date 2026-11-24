@@ -1,0 +1,52 @@
+# Continuation of the retained 70M policy at a 51,200-step horizon.
+#
+# The 80M wave at 40,960 regressed: the final kept 10/10 Brock but lost Mt.
+# Moon depth, and its deepest medians were 34k+, close to the cap. The retained
+# "best" was a 3/10 transient triggered by a Mt. Moon 1 event, so it is not a
+# usable base. This tier re-seeds from the 70M final, which was 10/10 Brock with
+# Mt. Moon 3 Trainer 1 at 60%, and gives the cave exit more room without
+# changing the reward or learning rate.
+name: t2_levelmax_h50_lr1e4
+
+description: >
+  Max-level potential at 4.0 with a 51,200-step horizon and 1e-4 learning rate.
+  Same observation and reward as t2_levelmax; a longer life for Mt. Moon.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 51200
+  stagnation_steps: 25600
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+  resume_learning_rate: 0.0001
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 100000000
+  reward_fn: default
+  seed: 43

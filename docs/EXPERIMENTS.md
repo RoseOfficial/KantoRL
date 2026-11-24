@@ -867,3 +867,25 @@ The retained best at 66.25M is stronger on Route 3 (trainer 6 at 100%, trainer
 7 at 90%) but weaker on Mt. Moon 3 (10% versus the final's 60%), so the final is
 the better frontier base. Badge rate is back to 10/10 after the 40k horizon
 dip. The Exit Super Nerd and Cerulean remain unreached.
+
+## 80M: regression at 40k, fall back to the 70M policy
+
+80M final, 10 episodes of 40,960:
+
+| milestone | 70M final | 80M final |
+|---|---:|---:|
+| Boulder Badge | 10/10, 12,470 | 10/10, 18,172 |
+| Route 3 | 10/10 | 10/10 |
+| Mt. Moon 1 trainer 4 | 90% | 10% |
+| Mt. Moon 1 trainer 5 | 90% | 0% |
+| Mt. Moon 3 trainer 1 | 60% | 10% |
+
+The 80M wave kept the badge but lost almost all Mt. Moon depth. Its new event
+was Mt. Moon 1 Trainer 0 at 75.12M, and the retained "best" at that step is only
+3/10 on Brock -- a lucky event, not a better policy. The final is still 10/10,
+but it is worse than the 70M final on every Mt. Moon metric.
+
+Deepest medians at 80M are 34k+, close to the 40,960 cap. The next wave
+re-seeds from the **70M final** and raises the cap to 51,200, keeping the 1e-4
+rate. This is the first horizon change triggered by data rather than a fixed
+schedule. The 80M session is kept as the regression record, not used as a base.
