@@ -47,7 +47,8 @@ __all__ = [
 # t2_levelmax, t2_levelmax_h40, t2_levelmax_lr1e4, t2_levelmax_h40_lr1e4,
 # t2_levelmax_h50_lr1e4 and t2_levelmax_h60_lr5e5 are reward/horizon/optimizer
 # variants: same observation as t2_pragmatic. t2_levelmax_h60_lr5e5_lmap adds
-# the opt-in 15x15 local visited-tile window.
+# the opt-in 15x15 local visited-tile window; t2_levelmax_h60_lr2e5_rew keeps
+# the legacy observation and changes only the reward balance and rate.
 BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t0_pure",
     "t1_minimal",
@@ -62,6 +63,7 @@ BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t2_levelmax_h50_lr1e4",
     "t2_levelmax_h60_lr5e5",
     "t2_levelmax_h60_lr5e5_lmap",
+    "t2_levelmax_h60_lr2e5_rew",
 )
 
 # Keys allowed in the ``train`` section. These are loop-level arguments, not

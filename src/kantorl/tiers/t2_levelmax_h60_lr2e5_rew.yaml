@@ -1,0 +1,56 @@
+# Reward rebalance after the B2F navigation trace.
+#
+# The 99M policy reaches Mt. Moon B2F at ~33.5k steps, then spends the rest of
+# the 61,440-step episode fighting 212 wild Pokemon and gaining 8 levels. The
+# fossil room at (11-14, 5-8) stays unvisited. The marginal rewards explain it:
+# a level is worth 0.5 and a new tile 0.015, while the Super Nerd event is 8.0
+# but is never found.
+#
+# Lower the level weight 4.0 -> 1.0 and raise the exploration weight
+# 0.3 -> 1.0, so the fossil room's ~16 new tiles are worth about six levels.
+# The 5e-5 local-map fine-tune regressed; use 2e-5 for a gentler continuation.
+# Observation is the legacy seven components: this probe changes reward only.
+name: t2_levelmax_h60_lr2e5_rew
+
+description: >
+  99M continuation with level_weight 1.0, explore_weight 1.0 and a 2e-5 rate.
+  Same observation and horizon; targets the B2F wild-battle grinding.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 1.0
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 1.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.00002
+  resume_learning_rate: 0.00002
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 104000000
+  reward_fn: default
+  seed: 43

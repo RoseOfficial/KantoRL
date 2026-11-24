@@ -1052,3 +1052,15 @@ should change the reward balance, not add more map detail. The trace showed
 the policy grinding wild battles on B2F while the event reward is 8.0 and the
 per-tile exploration reward is 0.015, so lowering `level_weight` and raising
 `explore_weight` is the cheaper next test.
+
+## 104M reward rebalance: development probe
+
+Started from the 99M best (legacy seven-component observation) with
+`level_weight` 1.0, `explore_weight` 1.0 and a 2e-5 rate, same 61,440
+horizon. Target: the B2F trace showed 212 wild battles and 8 levels gained
+while the fossil room stayed unvisited; a level was worth 0.5 and a new tile
+0.015. The rebalance makes the fossil room's ~16 new tiles worth about six
+levels and halves the update rate to avoid the 5e-5 regression.
+
+This is a development probe, not the clean fixed-ruleset run. Seeds 0-9 remain
+the development set. Result pending.
