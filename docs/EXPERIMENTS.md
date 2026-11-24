@@ -889,3 +889,25 @@ Deepest medians at 80M are 34k+, close to the 40,960 cap. The next wave
 re-seeds from the **70M final** and raises the cap to 51,200, keeping the 1e-4
 rate. This is the first horizon change triggered by data rather than a fixed
 schedule. The 80M session is kept as the regression record, not used as a base.
+
+## 80M at 51k: the 78.8M checkpoint is the best policy; the final collapsed
+
+The 51,200-horizon run was seeded from the 70M final and trained 10M steps.
+
+| checkpoint | Boulder | Route 3 | Route 3 trainers 0/1/2/3/5/6 | Mt. Moon 1 t4 | Mt. Moon 3 t1 |
+|---|---:|---:|---|---:|---:|
+| 70M final | 10/10 | 10/10 | mixed, 6 at 90% | 90% | 60% |
+| **78.8M** | **10/10** | **10/10** | **100% each** | **100%** | **50%** |
+| 80M final | **0/10** | 0/10 | -- | -- | -- |
+
+Training `badges_mean` fell from 0.56 at 78.8M to 0 by 79.8M: a late destructive
+update, not a horizon failure. The 78.8M checkpoint is the strongest policy in
+the project, with deep medians of 40.7k and 44.8k, close to the 51.2k cap.
+
+No new event fired after 70M, so `best_model` never saved the 78.8M peak. This
+is a retention gap: an event-based snapshot cannot see a policy that improves
+without setting a new flag. The checkpoint survives only because cumulative
+saves every 100k are kept.
+
+Next: seed from 78.8M, lower the learning rate to 5e-5 to stop the late churn,
+and raise the cap to 61,440 for the remaining Mt. Moon depth.
