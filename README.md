@@ -52,6 +52,8 @@ checkpoint, is the headline sample-efficiency result.
 A 5M local-map fine-tune from 99M (104M) produced one transient Mt. Moon
 event but regressed from fresh starts (9/10 badge, Mt. Moon 3 t2 1/10, B2F
 7/10); the 99M checkpoint remains the best.
+A reward-rebalance probe (104M: level_weight 1.0, explore_weight 1.0,
+2e-5) also regressed (8/10 badge, B2F 8/10); the 99M checkpoint remains the best.
 
 
 ## Setup

@@ -1064,3 +1064,28 @@ levels and halves the update rate to avoid the 5e-5 regression.
 
 This is a development probe, not the clean fixed-ruleset run. Seeds 0-9 remain
 the development set. Result pending.
+
+## 104M reward rebalance: negative
+
+The 5M probe (99M -> 104M, 2e-5, `level_weight` 1.0, `explore_weight` 1.0)
+finished with `badges_mean` 1.0 but `events_mean` 24.3 and
+`explore_tiles_mean` 590, below the 99M peak (~30 and ~1.4k). The only new
+first-seen was an unnamed event flag (#1392) at 102,644,160; no curated
+milestone.
+
+Ten-seed evaluation, 61,440 steps:
+
+| checkpoint | Boulder | Route 3 | Mt. Moon 3 t2 | Mt. Moon B2F |
+|---|---:|---:|---:|---:|
+| 99M baseline | **10/10** | 10/10 | **9/10** | **10/10** |
+| 104M reward | 8/10 | 8/10 | 8/10 | 8/10 |
+
+Lowering the level reward and raising the exploration reward did not buy
+exploration; it degraded the core policy. The 99M checkpoint remains the best.
+This is a negative result for the reward-rebalance axis.
+
+The next mission-compatible probe is a method setting, not a new hand-authored
+rule: raise gamma from 0.995 to 0.999 on the 99M policy. The current effective
+horizon is ~200 steps, while the B2F loops span thousands; Boey uses
+0.999/0.9996. If that fails, the next step is the minimal observation prior
+(the player marker), not the full Boey minimap.
