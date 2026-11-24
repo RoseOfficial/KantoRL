@@ -911,3 +911,23 @@ saves every 100k are kept.
 
 Next: seed from 78.8M, lower the learning rate to 5e-5 to stop the late churn,
 and raise the cap to 61,440 for the remaining Mt. Moon depth.
+
+## 90M: 5e-5 stabilizes, Mt. Moon 3 Trainer 2 at 70%
+
+The 61,440-horizon run at 5e-5 was stable: `badges_mean` stayed near 1.0,
+with no late collapse. Final 90M, 10 episodes of 61,440:
+
+| milestone | result | median |
+|---|---:|---:|
+| Boulder Badge | **10/10** | 6,844 |
+| Route 3 | 10/10 | 7,226 |
+| Route 3 trainers 0/1/2/3/4/6/7 | 10/10 each | 10.5k-21.6k |
+| Route 3 trainer 5 | 5/10 | 30,172 |
+| Mt. Moon 1 trainer 4 | 10/10 | 27,032 |
+| Mt. Moon 3 trainer 1 | 5/10 | 38,085 |
+| **Mt. Moon 3 trainer 2** | **7/10** | 45,174 |
+
+The Exit Super Nerd and Cerulean remain 0/10. This is the strongest and fastest
+policy so far: the badge median is back to 6,844, the full Route 3 trainer line
+clears except trainer 5, and Mt. Moon 3 Trainer 2 is reached 7/10. The 5e-5 rate
+is the right setting for this stage; the 1e-4 runs were churning.
