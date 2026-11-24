@@ -131,6 +131,15 @@ def test_h50_lr1e4_tier_combines_the_longer_horizon_and_rate() -> None:
     assert config.resume_learning_rate == 1e-4
 
 
+def test_h60_lr5e5_tier_combines_the_longest_horizon_and_slowest_rate() -> None:
+    config = load_tier("t2_levelmax_h60_lr5e5").to_config("pokemon_red.gb")
+
+    assert config.max_steps == 61440
+    assert config.stagnation_steps == 30720
+    assert config.learning_rate == 5e-5
+    assert config.resume_learning_rate == 5e-5
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])

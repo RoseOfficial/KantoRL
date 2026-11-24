@@ -1,0 +1,53 @@
+# Continuation of the 78.8M policy at 5e-5 and a 61,440-step horizon.
+#
+# The 51,200-horizon run at 1e-4 kept 10/10 Brock and the full Route 3 trainer
+# line until 78.8M, then badges_mean fell from 0.56 to 0 by 79.8M. That is a
+# late destructive update, not a horizon failure. The 78.8M checkpoint is the
+# strongest policy in the project, with deep Mt. Moon medians of 40-45k.
+#
+# Halve the learning rate to stop the churn, and raise the cap to 61,440 for
+# the remaining Mt. Moon depth. Observation and reward are unchanged.
+name: t2_levelmax_h60_lr5e5
+
+description: >
+  Max-level potential at 4.0 with a 61,440-step horizon and 5e-5 learning rate.
+  Same observation and reward; gentler updates for the Mt. Moon exit.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.00005
+  resume_learning_rate: 0.00005
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 100000000
+  reward_fn: default
+  seed: 43
