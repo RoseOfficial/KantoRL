@@ -190,6 +190,12 @@ class KantoConfig:
         "recent_actions",
     )
 
+    # Draw the player's current global-map cell as 128 in the `map`
+    # observation. Off by default: the historical map is a pure visited bitmap.
+    # This is the minimal localization prior; it adds no walkability, sprites,
+    # warps, ledges or route knowledge, and the observation shape is unchanged.
+    map_player_marker: bool = False
+
     # =============================================================================
     # REWARD SETTINGS
     # =============================================================================

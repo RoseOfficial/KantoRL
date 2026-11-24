@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from kantorl.config import KantoConfig
-from kantorl.env import KantoRedEnv
+from kantorl.env import MAP_PLAYER_MARKER, KantoRedEnv, apply_player_marker
 from kantorl.obs import (
     ACTION_HISTORY_LEN,
     DEFAULT_OBS_COMPONENTS,
@@ -229,6 +229,20 @@ def test_local_map_producer_reads_context() -> None:
     window = np.zeros((LOCAL_MAP_SIZE, LOCAL_MAP_SIZE), dtype=np.uint8)
     producer = LocalMapProducer()
     assert producer.read(make_context(local_map=window)) is window
+
+
+def test_player_marker_marks_only_the_current_cell() -> None:
+    base = np.zeros(MAP_OBS_SHAPE, dtype=np.uint8)
+    base[5, 6] = 255
+
+    view = apply_player_marker(base, (7, 8))
+
+    assert view is not base
+    assert view[7, 8] == MAP_PLAYER_MARKER
+    assert view[5, 6] == 255
+    assert base[7, 8] == 0
+    assert np.count_nonzero(view) == 2
+    assert KantoConfig(rom_path="fake.gb").map_player_marker is False
 
 
 def test_env_space_includes_opt_in_local_map() -> None:

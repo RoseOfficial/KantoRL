@@ -1,0 +1,55 @@
+# Minimal player-marker probe.
+#
+# The 99M policy reaches Mt. Moon B2F but loops in its rooms; the global map
+# is a visited bitmap with no current-position marker. Mark the player's
+# current 48x48 cell as 128 in the existing map observation. No walkability,
+# sprites, warps, ledges or route knowledge is added, and the observation
+# shape is unchanged, so the 99M checkpoint loads directly.
+#
+# Observation, reward and horizon match the 99M baseline; the continuation
+# rate is 2e-5 because the 5e-5 local-map fine-tune was destructive.
+name: t2_levelmax_h60_marker_lr2e5
+
+description: >
+  99M continuation with the player's map cell marked as 128. Same reward,
+  observation shape and horizon; the marker is the only observation prior.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  map_player_marker: true
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.00002
+  resume_learning_rate: 0.00002
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 104000000
+  reward_fn: default
+  seed: 43

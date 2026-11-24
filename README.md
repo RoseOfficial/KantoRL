@@ -237,6 +237,9 @@ kantorl train pokemon_red.gb --obs screens health events
 tile rather than the global map's ~9x9 tiles per cell, so indoor rooms and
 corridors keep their shape.
 
+`map` can optionally mark the player's current cell as 128 with
+`map_player_marker: true`; the default stays a pure visited bitmap.
+
 In Python:
 
 ```python

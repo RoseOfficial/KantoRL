@@ -1123,3 +1123,13 @@ candidate method setting for the final ruleset.
 The next observation-prior test is the minimal player marker on the 99M base.
 If we hold the line at zero new observation priors, the 99M is the ceiling and
 the coarse map is the binding limit.
+
+## 104M player marker: development
+
+Started from 99M with `map_player_marker=True`: the player's current 48x48
+cell is 128, against 0 = unvisited and 255 = visited. This is the minimal
+localization prior: no walkability, sprites, warps, ledges or route
+knowledge, and the observation shape is unchanged, so the 99M checkpoint
+loads directly. Observation, reward, gamma and horizon match the 99M
+baseline; the continuation rate is 2e-5. Seeds 0-9 remain the development
+set. Result pending.

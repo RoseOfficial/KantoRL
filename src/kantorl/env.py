@@ -111,6 +111,22 @@ def _load_milestones() -> dict[int, str]:
     return _MILESTONE_MAP
 
 
+# Value used for the player's current cell when map_player_marker is enabled.
+# The historical map uses 0 = unvisited and 255 = visited; 128 is distinct.
+MAP_PLAYER_MARKER = 128
+
+
+def apply_player_marker(
+    explore_map: np.ndarray,
+    cell: tuple[int, int],
+    marker: int = MAP_PLAYER_MARKER,
+) -> np.ndarray:
+    """Return a copy of the visited map with the player's current cell marked."""
+    view = explore_map.copy()
+    view[cell] = marker
+    return view
+
+
 # =============================================================================
 # ACTION MAPPING CONSTANTS
 # =============================================================================
@@ -385,6 +401,7 @@ class KantoRedEnv(gym.Env):
         # on one map cannot show another map's tiles.
         self.tile_visits: set[tuple[int, int, int]] = set()
         self._player_position: tuple[int, int, int] | None = None
+        self._player_explore_cell: tuple[int, int] | None = None
 
         # Scale factors for converting global coords to exploration map coords
         # Kanto is ~444x436 tiles, we compress to 48x48
@@ -619,6 +636,7 @@ class KantoRedEnv(gym.Env):
         self.explore_map = np.zeros(MAP_OBS_SHAPE, dtype=np.uint8)
         self.tile_visits.clear()
         self._player_position = memory.get_position(self.pyboy)
+        self._player_explore_cell = self._explore_cell_for(*self._player_position)
 
         # Clear frame stack
         self.frame_stack = np.zeros_like(self.frame_stack)
@@ -831,10 +849,14 @@ class KantoRedEnv(gym.Env):
             map_id, x, y = self._player_position or memory.get_position(self.pyboy)
             local_map = build_local_map(self.tile_visits, map_id, x, y)
 
+        map_obs = self.explore_map
+        if self.config.map_player_marker and self._player_explore_cell is not None:
+            map_obs = apply_player_marker(self.explore_map, self._player_explore_cell)
+
         ctx = ObsContext(
             pyboy=self.pyboy,
             frame_stack=self.frame_stack if self._want_screens else None,
-            explore_map=self.explore_map,
+            explore_map=map_obs,
             local_map=local_map,
             recent_actions=self.recent_actions,
             event_flags=events,
@@ -875,6 +897,13 @@ class KantoRedEnv(gym.Env):
         h, w = self.config.screen_size
         return cv2.resize(gray, (w, h), interpolation=cv2.INTER_AREA)
 
+    def _explore_cell_for(self, map_id: int, x: int, y: int) -> tuple[int, int]:
+        """Map local coordinates to the 48x48 exploration bitmap."""
+        global_x, global_y = local_to_global(map_id, x, y)
+        map_x = min(global_x // self._explore_scale[0], 47)
+        map_y = min(global_y // self._explore_scale[1], 47)
+        return map_y, map_x
+
     def _update_explore_map(self) -> None:
         """
         Update the exploration bitmap with the current position.
@@ -896,15 +925,9 @@ class KantoRedEnv(gym.Env):
         self.tile_visits.add((map_id, x, y))
         self._player_position = (map_id, x, y)
 
-        # Convert to global Kanto coordinates
-        global_x, global_y = local_to_global(map_id, x, y)
-
-        # Scale down to exploration map coordinates
-        # Clamp to valid range [0, 47] to avoid index errors
-        map_x = min(global_x // self._explore_scale[0], 47)
-        map_y = min(global_y // self._explore_scale[1], 47)
-
         # Mark as visited (255 = max uint8 value)
+        map_y, map_x = self._explore_cell_for(map_id, x, y)
+        self._player_explore_cell = (map_y, map_x)
         self.explore_map[map_y, map_x] = 255
 
     def _get_info(self) -> dict[str, Any]:
