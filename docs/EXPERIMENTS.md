@@ -842,3 +842,28 @@ slowed, a deliberate trade of early-game speed for post-Brock depth.
 
 The next step is the same pattern: seed a 70M continuation from the 59.83M
 best and target the Mt. Moon exit and Cerulean.
+
+## 70M: two trainers into Mt. Moon 3, badge rate restored
+
+Final 70M, 10 episodes of 40,960:
+
+| milestone | result | median |
+|---|---:|---:|
+| Boulder Badge | **10/10** | 12,470 |
+| Route 3 | 10/10 | 12,906 |
+| Route 3 trainer 6 | 9/10 | 15,790 |
+| Route 3 trainer 7 | 9/10 | 16,476 |
+| Mt. Moon 1 trainer 4 | 9/10 | 18,677 |
+| Mt. Moon 1 trainer 5 | 9/10 | 22,667 |
+| Mt. Moon 3 trainer 1 | 6/10 | 25,936 |
+| Mt. Moon 3 trainer 2 | 0/10 in eval | first seen 66.25M |
+
+New `first_seen` after the 59.83M seed:
+
+- Mt. Moon 1 Trainer 1 at 64.89M
+- Mt. Moon 3 Trainer 2 at 66.25M
+
+The retained best at 66.25M is stronger on Route 3 (trainer 6 at 100%, trainer
+7 at 90%) but weaker on Mt. Moon 3 (10% versus the final's 60%), so the final is
+the better frontier base. Badge rate is back to 10/10 after the 40k horizon
+dip. The Exit Super Nerd and Cerulean remain unreached.
