@@ -1097,3 +1097,29 @@ from ~200 to ~1,000 steps; the B2F loops span ~1,000. Observation, reward and
 horizon are unchanged. This is a method setting, not a new hand-authored rule;
 the checkpoint's gamma is saved as 0.999 so PPO.load restores it. Seeds 0-9
 remain the development set. Result pending.
+
+## 104M gamma 0.999: positive method result, frontier unchanged
+
+The 5M gamma probe (99M -> 104M, gamma 0.995 -> 0.999, 2e-5) finished with
+`badges_mean` 1.0, `events_mean` 27.8 and `explore_tiles_mean` 914. The only
+new first-seen was an unnamed event flag (#1400) at 99,902,176; no curated
+milestone.
+
+Ten-seed evaluation, 61,440 steps:
+
+| checkpoint | Boulder | Route 3 | Mt. Moon 3 t2 | Mt. Moon B2F | Mt. Moon 1 t1/t5/t6 |
+|---|---:|---:|---:|---:|---|
+| 99M baseline | 10/10 (7,182) | 10/10 | 9/10 | 10/10 (24,587) | 10/10, 9/10, 8/10 |
+| **104M gamma** | **10/10 (5,160)** | 10/10 | **10/10** | 10/10 (28,590) | 8/10, 7/10, 0/10 |
+| 99.9M best | 9/10 | 8/10 | 5/10 | 8/10 | 5/10, 4/10, -- |
+
+Gamma 0.999 is a positive method result: the badge and Route 3 are faster,
+Mt. Moon 3 Trainer 2 becomes 10/10, and B2F stays 10/10. It loses Mt. Moon 1
+depth (t6 0/10) and is slower at B2F, and it still does not reach Trainer 3,
+the Exit Super Nerd, or Cerulean. The 99M checkpoint remains the deepest
+policy; the gamma final is a strong speed/reliability alternative and a
+candidate method setting for the final ruleset.
+
+The next observation-prior test is the minimal player marker on the 99M base.
+If we hold the line at zero new observation priors, the 99M is the ceiling and
+the coarse map is the binding limit.

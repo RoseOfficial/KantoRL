@@ -54,6 +54,9 @@ event but regressed from fresh starts (9/10 badge, Mt. Moon 3 t2 1/10, B2F
 7/10); the 99M checkpoint remains the best.
 A reward-rebalance probe (104M: level_weight 1.0, explore_weight 1.0,
 2e-5) also regressed (8/10 badge, B2F 8/10); the 99M checkpoint remains the best.
+A gamma-0.999 probe (104M) kept 10/10 Boulder at a 5,160 median and made
+Mt. Moon 3 t2 10/10, but lost Mt. Moon 1 depth (t6 0/10) and did not reach
+Trainer 3; the 99M remains the deepest policy.
 
 
 ## Setup
