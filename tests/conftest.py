@@ -89,7 +89,8 @@ def mock_pyboy_with_party(mock_pyboy: MagicMock) -> MagicMock:
     # Party level addresses (offset by 0x2C for each party slot)
     LEVEL_ADDRS = [0xD18C, 0xD1B8, 0xD1E4, 0xD210, 0xD23C, 0xD268]
 
-    # Current HP addresses (high byte, offset by 0x2C for each party slot)
+    # Current HP addresses (high byte, offset by 0x2C for each party slot).
+    # Gen 1 stores HP big-endian: high byte first, low byte at addr + 1.
     HP_ADDRS = [0xD16C, 0xD198, 0xD1C4, 0xD1F0, 0xD21C, 0xD248]
 
     # Configure memory return values
@@ -100,8 +101,12 @@ def mock_pyboy_with_party(mock_pyboy: MagicMock) -> MagicMock:
             if addr == level_addr:
                 return [15, 12, 10, 0, 0, 0][i]
         for i, hp_addr in enumerate(HP_ADDRS):
+            if i >= 3:
+                continue
             if addr == hp_addr:
-                return 100 if i < 3 else 0  # Full HP for party members
+                return 0  # High byte of 100
+            if addr == hp_addr + 1:
+                return 100  # Low byte, so read_word returns 100
         return 0
 
     mock_pyboy.memory.__getitem__ = Mock(side_effect=memory_getter)

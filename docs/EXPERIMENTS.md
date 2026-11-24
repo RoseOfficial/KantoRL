@@ -931,3 +931,64 @@ The Exit Super Nerd and Cerulean remain 0/10. This is the strongest and fastest
 policy so far: the badge median is back to 6,844, the full Route 3 trainer line
 clears except trainer 5, and Mt. Moon 3 Trainer 2 is reached 7/10. The 5e-5 rate
 is the right setting for this stage; the 1e-4 runs were churning.
+
+## 100M: the 99M checkpoint is the best policy; the party reads were corrupt
+
+The 100M wave resumed from the 90M final at 5e-5 with the 61,440 horizon and
+added **no new first-seen events**. Training was unstable even at 5e-5:
+
+- `badges_mean` fell from 1.0 to 0.06 at about 95.9M, recovered by 96.3M,
+  then fell again at 99.83M and stayed there.
+- Final 100M, 10 episodes of 61,440: Boulder **5/10** (median 28,164),
+  Route 3 4/10, no Mt. Moon.
+- A checkpoint sweep found the peak before the last collapse at **99.0M**.
+
+The 99.0M checkpoint is the best policy in the project, evaluated under the
+corrected party reads (below), 10 episodes of 61,440:
+
+| milestone | result | median |
+|---|---:|---:|
+| Boulder Badge | **10/10** | 7,182 |
+| Route 3 | 10/10 | 7,440 |
+| Route 3 trainer 5 | 9/10 | 18,911 |
+| Mt. Moon 1 trainer 2 | 10/10 | 21,928 |
+| Mt. Moon 1 trainer 5 | 9/10 | 16,759 |
+| Mt. Moon 1 trainer 6 | 8/10 | 30,826 |
+| Mt. Moon 3 trainer 2 | **9/10** | 28,482 |
+| Mt. Moon B2F | **10/10** | 24,587 |
+
+The Exit Super Nerd and Cerulean remain 0/10. The 99.5M checkpoint still beat
+Brock 10/10 in the same sweep but had already regressed in Mt. Moon (B1F 1/10,
+no B2F), so depth was oscillating before the final collapse.
+
+### The party reads were corrupt
+
+A level-89 party member in an evaluation exposed a memory-layout bug:
+
+- `get_party_levels` advanced **one byte per party slot**. Party members are
+  44 bytes apart (`PARTY_MON_STRIDE`), so slots 2+ read max-HP, stat, and PP
+  bytes as levels. This fed the `level` observation and the
+  `level_source=max` reward; `max_level` could jump to a fake 89.
+- `get_party_hp` advanced two bytes per slot and read 16-bit HP little-endian.
+  Gen 1 stores HP high byte first, so 25 HP read as 6400. The early-game HP
+  *ratio* was roughly preserved because both operands were byte-swapped, which
+  is why the health observation looked plausible.
+
+Fixed in `memory.py`: both readers use the 44-byte stride, `read_word` is
+big-endian, and empty/phantom slots are skipped. `tests/test_memory.py` covers
+the stride, byte order, fainted members, and empty slots. All 149 tests pass.
+
+Every earlier checkpoint, including 99M, was trained with the corrupted level
+signal. The 99M checkpoint survives the correction: under the fixed reads it
+still scores Boulder 10/10 (median 7,182), Mt. Moon 3 Trainer 2 9/10, and B2F
+10/10. The fix starts a cleaner baseline for the next wave; it does not
+invalidate the best artifact.
+
+### What this changes for the next wave
+
+The last 1M steps of the 100M wave were destructive and added no event. The
+next wave should resume from 99M with the fixed party reads at 5e-5, and stop
+at the first sustained `badges_mean` collapse instead of running to the target.
+If Mt. Moon still stalls, the remaining suspects are the coarse 9x9 global map
+for indoor mazes and the level reward paying for battles rather than the
+Mt. Moon exit.

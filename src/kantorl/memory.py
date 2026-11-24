@@ -138,27 +138,27 @@ ADDR_PARTY_SPECIES = 0xD164
 
 # Party Pokemon Current HP
 # Address: 0xD16C
-# Size: 12 bytes (2 bytes per Pokemon, 6 Pokemon)
-# Format: Little-endian 16-bit integers
+# Size: 2 bytes per Pokemon, with a 44-byte stride between party slots
+# Format: Big-endian 16-bit integers (high byte first)
 # Range: 0 to max HP (up to 714 for Chansey at level 100)
 # Source: pokered disassembly (wPartyMon1HP)
-# Note: HP is stored in the Pokemon data structure, not as a separate array
+# Note: HP is a field inside each 44-byte Pokemon struct, not an array
 ADDR_PARTY_HP = 0xD16C
 
 # Party Pokemon Max HP
 # Address: 0xD18D
-# Size: 12 bytes (2 bytes per Pokemon, 6 Pokemon)
-# Format: Little-endian 16-bit integers
+# Size: 2 bytes per Pokemon, with a 44-byte stride between party slots
+# Format: Big-endian 16-bit integers (high byte first)
 # Source: pokered disassembly (wPartyMon1MaxHP)
 # Note: Offset +33 bytes from current HP in the Pokemon data structure
 ADDR_PARTY_MAX_HP = 0xD18D
 
 # Party Pokemon Levels
 # Address: 0xD18C
-# Size: 6 bytes (1 byte per Pokemon)
+# Size: 1 byte per Pokemon, with a 44-byte stride between party slots
 # Range: 1-100
 # Source: pokered disassembly (wPartyMon1Level)
-# Note: Offset +32 bytes from current HP
+# Note: Offset +32 bytes from current HP; not a contiguous level array
 ADDR_PARTY_LEVEL = 0xD18C
 
 
@@ -289,15 +289,16 @@ def read_byte(pyboy: "PyBoy", addr: int) -> int:
 
 def read_word(pyboy: "PyBoy", addr: int) -> int:
     """
-    Read a 16-bit word (2 bytes) from GameBoy memory in little-endian format.
+    Read a 16-bit word (2 bytes) from GameBoy memory in big-endian format.
 
-    The GameBoy uses little-endian byte order, meaning the least significant
-    byte is stored at the lower address. For example, the value 0x1234 is
-    stored as [0x34, 0x12] in consecutive memory locations.
+    Gen 1 stores 16-bit battle and party values high byte first, even though
+    the CPU itself is little-endian. For example, 25 HP is stored as
+    [0x00, 0x19]. Reading those bytes little-endian yields 6400, which is why
+    the byte order matters for every HP and stat read.
 
     Args:
         pyboy: PyBoy emulator instance with the game loaded.
-        addr: Memory address of the low byte (the word spans addr and addr+1).
+        addr: Memory address of the high byte (the word spans addr and addr+1).
 
     Returns:
         Integer value of the 16-bit word (0-65535).
@@ -305,17 +306,17 @@ def read_word(pyboy: "PyBoy", addr: int) -> int:
     Example:
         >>> hp = read_word(pyboy, ADDR_PARTY_HP)
         >>> print(f"First Pokemon HP: {hp}")
-        First Pokemon HP: 45
+        First Pokemon HP: 25
 
     Notes:
-        - Used for HP values, stats, and other 16-bit quantities
-        - The GameBoy CPU (Z80-like) is natively little-endian
+        - Used for HP values and other 16-bit quantities in Gen 1 structures
+        - The GameBoy CPU is little-endian, but the game data is not
         - addr+1 must also be a valid memory address
     """
-    # Read the low byte from the base address
-    lo = pyboy.memory[addr]
-    # Read the high byte from the next address
-    hi = pyboy.memory[addr + 1]
+    # Read the high byte from the base address
+    hi = pyboy.memory[addr]
+    # Read the low byte from the next address
+    lo = pyboy.memory[addr + 1]
     # Combine: shift high byte left 8 bits, then OR with low byte
     return (hi << 8) | lo
 
@@ -556,16 +557,19 @@ def get_party_hp(pyboy: "PyBoy") -> list[tuple[int, int]]:
         Pokemon 3: 0/38 HP  # Fainted
 
     Notes:
-        - HP values are 16-bit (0-65535), though real max is ~714
-        - Fainted Pokemon have current_hp = 0
+        - HP values are 16-bit big-endian (0-65535), though real max is ~714
+        - Party members are 44 bytes apart (PARTY_MON_STRIDE), not adjacent
+        - Fainted Pokemon have current_hp = 0 and are kept
+        - Empty/phantom slots read as (0, 0) and are skipped
         - Used to calculate party health fraction for observations
     """
     count = get_party_count(pyboy)
     result = []
     for i in range(count):
-        # HP values are 16-bit, stored every 2 bytes
-        current = read_word(pyboy, ADDR_PARTY_HP + i * 2)
-        max_hp = read_word(pyboy, ADDR_PARTY_MAX_HP + i * 2)
+        current = read_word(pyboy, ADDR_PARTY_HP + i * PARTY_MON_STRIDE)
+        max_hp = read_word(pyboy, ADDR_PARTY_MAX_HP + i * PARTY_MON_STRIDE)
+        if current == 0 and max_hp == 0:
+            continue
         result.append((current, max_hp))
     return result
 
@@ -593,12 +597,19 @@ def get_party_levels(pyboy: "PyBoy") -> list[int]:
 
     Notes:
         - Levels are single bytes (1-100 in normal gameplay)
+        - Party members are 44 bytes apart (PARTY_MON_STRIDE), not adjacent;
+          reading them as a contiguous array returned max-HP and stat bytes
+          (seen as fake level-89 party members)
+        - Zero levels are skipped, which drops empty/phantom slots
         - Used for Fourier encoding in observation space
         - Level ups are an important progress indicator
     """
     count = get_party_count(pyboy)
-    # Levels are stored as single bytes, one per Pokemon
-    return [read_byte(pyboy, ADDR_PARTY_LEVEL + i) for i in range(count)]
+    levels = [
+        read_byte(pyboy, ADDR_PARTY_LEVEL + i * PARTY_MON_STRIDE)
+        for i in range(count)
+    ]
+    return [level for level in levels if level > 0]
 
 
 def get_total_party_hp(pyboy: "PyBoy") -> tuple[int, int]:

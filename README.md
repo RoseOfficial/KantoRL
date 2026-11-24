@@ -22,17 +22,26 @@ environments. All evaluations are stochastic and start from the same save state.
 | milestone | best result | where |
 |---|---:|---|
 | First Boulder Badge | 10.48M training steps | levelmax, first-seen log |
-| Reliable badge | **10/10** (median 6,748 steps) | 50M checkpoint, 40k eval |
-| Route 3 | 10/10 | 50M checkpoint |
-| Route 3 trainers 6 and 7 | **90%** | 60M best, 40k horizon |
-| Mt. Moon 1 trainers 4 and 5 | **90%** | 60M best |
-| Cerulean City | not yet | — |
+| Reliable badge | **10/10** (median 7,182 steps) | 99M best, 61k eval |
+| Route 3, trainers 0-4 and 6-7 | 10/10 | 99M best |
+| Route 3 trainer 5 | **90%** | 99M best |
+| Mt. Moon 1 trainers 1, 2 and 4 | 10/10 | 99M best |
+| Mt. Moon 3 trainer 2 | **90%** (median 28,482) | 99M best |
+| Mt. Moon B2F | 10/10 (median 24,587) | 99M best |
+| Exit Super Nerd / Cerulean City | not yet | — |
 
-The current frontier is **Mt. Moon → Cerulean**. The full game has not been
-completed: training episodes cap at 40,960 steps, and the current policy has
-not left Mt. Moon. The 800M-step reference for a full Red clear is CJBoey's
+The current frontier is the **Mt. Moon B2F exit → Cerulean**. The full game has
+not been completed: training episodes cap at 61,440 steps, and the current
+policy reaches Mt. Moon B2F in every episode but has not beaten the Exit
+Super Nerd. The 800M-step reference for a full Red clear is CJBoey's
 stage-managed baseline; this project deliberately uses no stage manager, no
 scripted HMs, and no route curriculum.
+
+The 99M checkpoint was trained before a party-memory fix: levels and HP now use
+the 44-byte party-struct stride and big-endian HP, and the old reads could
+report fake level-89 party members. The checkpoint still scores 10/10 under the
+corrected reads. See [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) for the 100M
+collapse and the fix.
 
 
 ## Setup
