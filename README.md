@@ -14,6 +14,27 @@ A minimal, educational RL environment for Pokemon Red. Simple enough for student
 Measured results, and the harness bugs found while getting them, are recorded in
 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
 
+## Results so far
+
+Trained from `bulba_start` (Oak's Lab, level-6 Bulbasaur) with 32 PyBoy
+environments. All evaluations are stochastic and start from the same save state.
+
+| milestone | best result | where |
+|---|---:|---|
+| First Boulder Badge | 10.48M training steps | levelmax, first-seen log |
+| Reliable badge | **10/10** (median 6,748 steps) | 50M checkpoint, 40k eval |
+| Route 3 | 10/10 | 50M checkpoint |
+| Route 3 trainers 6 and 7 | **90%** | 60M best, 40k horizon |
+| Mt. Moon 1 trainers 4 and 5 | **90%** | 60M best |
+| Cerulean City | not yet | — |
+
+The current frontier is **Mt. Moon → Cerulean**. The full game has not been
+completed: training episodes cap at 40,960 steps, and the current policy has
+not left Mt. Moon. The 800M-step reference for a full Red clear is CJBoey's
+stage-managed baseline; this project deliberately uses no stage manager, no
+scripted HMs, and no route curriculum.
+
+
 ## Setup
 
 Verified on Windows with Python 3.13 and an 8-core/16-thread CPU.
@@ -117,6 +138,8 @@ kantorl train pokemon_red.gb --stream --stream-user "my-agent" --stream-color "#
 - **Educational**: Documented memory addresses and clean architecture
 - **Compatible**: Works with stable-baselines3 and Gymnasium
 - **Extensible**: Protocol-based reward system for custom objectives
+- **Tiered**: Named observation, reward and horizon experiments in YAML
+- **Retained**: First-seen milestone log plus best and per-badge checkpoints
 - **Stream Visualization**: Optional real-time training visualization on shared map
 
 ## Benchmarks
@@ -206,17 +229,25 @@ kantorl tier list
 kantorl tier run t0_pure pokemon_red.gb --session runs/t0
 ```
 
-| Tier | Observation | Reward | Assumes |
+| Tier | Observation | What varies | Assumes |
 |---|---|---|---|
-| `t0_pure` | `screens` | default (shared) | action set + frame rate |
-| `t1_minimal` | `screens`, `health` | default (shared) | pixels + visible HP |
-| `t2_pragmatic` | all seven | default (shared) | RAM progress oracles |
+| `t0_pure` | `screens` | canonical ladder | action set + frame rate |
+| `t1_minimal` | `screens`, `health` | canonical ladder | pixels + visible HP |
+| `t2_pragmatic` | all seven | canonical ladder | RAM progress oracles |
+| `t2_screens_map` | `screens`, `map` | ablation arm | pixels + spatial memory |
+| `t2_all_no_map` | all but `map` | ablation arm | RAM, no spatial memory |
+| `t2_level4` | all seven | sum-level potential, weight 4.0 | failed variant, documented |
+| `t2_levelmax` | all seven | max-level potential, weight 4.0 | best early-game reward |
+| `t2_levelmax_h40` | all seven | max-level, 40,960 horizon | failed alone, documented |
+| `t2_levelmax_lr1e4` | all seven | max-level, 1e-4 | continuation tier |
+| `t2_levelmax_h40_lr1e4` | all seven | max-level, 40,960, 1e-4 | current best tier |
 
-T0 and T1 and T2 hold `max_steps`, `frame_stacks`, `screen_size`, reward scale
-and `gamma` identical. The pairwise difference is therefore the observation,
-which is what makes the comparison an ablation rather than an anecdote.
-Curriculum is off in all three because it changes *where episodes start*, a
-separate axis; copy a tier file and set `enable_curriculum: true` to study it.
+The first three are the canonical ladder: they hold `max_steps`,
+`frame_stacks`, `screen_size`, reward scale and `gamma` identical, so the only
+difference is the observation. The rest are single-axis variants used to price
+a reward, horizon or optimizer change. Curriculum is off in every tier because
+it changes *where episodes start* — exactly the rule this project is trying to
+avoid importing.
 
 Tier definitions live in `src/kantorl/tiers/*.yaml`. Unknown keys are rejected
 so a typo cannot silently change what you measured.
@@ -234,8 +265,6 @@ kantorl milestones runs/t0/checkpoints/model_1000000.zip pokemon_red.gb \
 If training started from a save state, pass the same `--save-state` here.
 Without it the policy is evaluated from a cold ROM boot — a starting state it
 never trained on, which silently invalidates the comparison.
-
-```
 
 Every run uses the same seeds and step budget, so reports from different
 checkpoints line up.
@@ -262,6 +291,19 @@ ruler. Output:
 A milestone that was never reached is reported with `reach_rate: 0` and a null
 median step, which is deliberately distinct from "reached at step 0".
 
+### Retention
+
+`FirstSeenCallback` writes `first_seen.csv` during training and snapshots the
+policy when a milestone is first reached:
+
+- `checkpoints/best_model.zip` — updated on each new event or badge.
+- `checkpoints/badge_<n>_model.zip` — immutable snapshot at the first n-th badge.
+- matching `_vecnormalize.pkl` and `_step.txt` files.
+
+`scripts/eval_runs.py --best` evaluates `best_model.zip` into `eval_best/`
+without overwriting the latest-checkpoint report. The peak is worth keeping:
+seed 43's 20M policy beats Brock 7/10, while the same run at 40M beats him 0/10.
+
 The question the tiers ask is comparative, so `scripts/compare_milestones.py`
 puts several reports in one table:
 
@@ -285,13 +327,28 @@ stack and screen size are recovered from the recorded observation space.
 
 ## Reward System
 
-Default reward (matching PokemonRedExperiments V2):
-- **Event progress**: +4.0 per new event triggered
-- **Badge collection**: +5.0 per gym badge
-- **Map discovery**: +1.0 per new map visited
-- **Exploration**: +0.005 per new coordinate
-- **Healing**: Proportional to HP restored
-- **Stuck penalty**: -0.025 after 500 steps without progress
+Default reward (matching PokemonRedExperiments V2, with two corrections):
+
+- **Event progress**: +4.0 per new event flag. Inherited starting flags are
+  baselined and never paid.
+- **Badge collection**: +5.0 per gym badge.
+- **Level**: potential-based on the **strongest party member**, so catching a
+  Pokémon pays 0 and a party wipe cannot re-earn levels. At the canonical
+  `level_weight=1.0`: +0.5 per level below 15, +0.125 above. The levelmax
+  tiers use weight 4.0: +2.0 and +0.5.
+- **Map discovery**: +1.0 per new map ID.
+- **Exploration**: +0.015 per new `(map, x, y)`. The set clears on each new
+  event, so progress opens fresh ground.
+- **Interaction**: +0.05 for the first A press at a coordinate, once per
+  environment process, not once per episode.
+- **Healing**: 0. Off because it was farmable: 78% of one run's reward while it
+  made no progress.
+- **Stuck penalty**: 0. Off because it also fires during dialogue and menus.
+
+`VecNormalize(norm_reward=True, clip_reward=10.0)` rescales the summed reward
+by the running return standard deviation and clips to ±10. The raw weights
+above set relative preferences; the policy sees roughly unit-scale rewards.
+There is no explicit time cost and no Champion completion bonus.
 
 ## Custom Rewards
 
