@@ -1133,3 +1133,26 @@ knowledge, and the observation shape is unchanged, so the 99M checkpoint
 loads directly. Observation, reward, gamma and horizon match the 99M
 baseline; the continuation rate is 2e-5. Seeds 0-9 remain the development
 set. Result pending.
+
+## 104M player marker: negative
+
+The 5M marker probe (99M -> 104M, `map_player_marker=True`, 2e-5) finished
+with `badges_mean` 1.0 and `events_mean` 27.2; no curated first-seen events.
+Ten-seed evaluation with `--map-player-marker`:
+
+| checkpoint | Boulder | Route 3 | Mt. Moon 3 t2 | Mt. Moon B2F | Mt. Moon 1 t1/t5/t6 |
+|---|---:|---:|---:|---:|---|
+| 99M baseline | 10/10 (7,182) | 10/10 | 9/10 | 10/10 | 10/10, 9/10, 8/10 |
+| 104M gamma | 10/10 (5,160) | 10/10 | 10/10 | 10/10 | 8/10, 7/10, 0/10 |
+| 104M marker | 10/10 (8,810) | 10/10 | 5/10 | 2/10 | 0/10, 1/10, 0/10 |
+
+The marker kept the badge and improved Route 3 trainers 5/6, but collapsed
+the Mt. Moon depth. It did not reach Trainer 3, the Exit Super Nerd, or
+Cerulean. The minimal prior ladder is now exhausted: the local visited map,
+the reward rebalance and the player marker all failed; gamma 0.999 is the
+only positive method result. The coarse 48x48 global map is the binding limit.
+
+The next step is either a deliberate larger observation prior (a local
+tile-ID or walkability map, with no sprites/warps/ledges) or stopping the
+prior ladder and running the clean fixed-ruleset measurement on the 99M or
+gamma policy.

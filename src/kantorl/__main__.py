@@ -342,6 +342,14 @@ def main() -> int:
             "it the policy is evaluated from a cold ROM boot."
         ),
     )
+    mil_parser.add_argument(
+        "--map-player-marker",
+        action="store_true",
+        help=(
+            "Enable the player-position marker on the map. Must match training; "
+            "the checkpoint's observation space does not record this flag."
+        ),
+    )
 
     # -------------------------------------------------------------------------
     # Tier Command
@@ -699,6 +707,8 @@ def main() -> int:
             base_config.action_freq = args.action_freq
         if args.save_state:
             base_config.save_state_path = args.save_state
+        if args.map_player_marker:
+            base_config.map_player_marker = True
 
         report = evaluate_milestones(
             checkpoint_path=args.checkpoint,

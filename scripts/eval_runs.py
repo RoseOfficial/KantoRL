@@ -75,6 +75,11 @@ def main() -> int:
     parser.add_argument("--budget", type=int, default=20000)
     parser.add_argument("--save-state", default=None)
     parser.add_argument(
+        "--map-player-marker",
+        action="store_true",
+        help="Enable the player-position marker (must match training)",
+    )
+    parser.add_argument(
         "--best",
         action="store_true",
         help="Evaluate checkpoints/best_model.zip instead of the latest checkpoint",
@@ -113,6 +118,8 @@ def main() -> int:
             ]
             if args.save_state:
                 cmd += ["--save-state", args.save_state]
+            if args.map_player_marker:
+                cmd.append("--map-player-marker")
             print(f"eval {run.name} <- {checkpoint.name}", flush=True)
             subprocess.run(cmd, check=False)
 
