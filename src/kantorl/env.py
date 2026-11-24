@@ -74,6 +74,7 @@ from kantorl.obs import (
     ObsContext,
     build_producers,
 )
+from kantorl.obs.producers import build_local_map
 from kantorl.rewards import GameState, RewardFunction, create_reward
 
 # =============================================================================
@@ -380,6 +381,11 @@ class KantoRedEnv(gym.Env):
         # Value 255 = visited, 0 = not visited
         self.explore_map = np.zeros(MAP_OBS_SHAPE, dtype=np.uint8)
 
+        # Per-tile visits for the local centered map. Keyed by map so a window
+        # on one map cannot show another map's tiles.
+        self.tile_visits: set[tuple[int, int, int]] = set()
+        self._player_position: tuple[int, int, int] | None = None
+
         # Scale factors for converting global coords to exploration map coords
         # Kanto is ~444x436 tiles, we compress to 48x48
         self._explore_scale = (GLOBAL_MAP_WIDTH // 48, GLOBAL_MAP_HEIGHT // 48)
@@ -609,8 +615,10 @@ class KantoRedEnv(gym.Env):
         # Clear action history
         self.recent_actions = np.zeros(ACTION_HISTORY_LEN, dtype=np.int64)
 
-        # Clear exploration map
+        # Clear exploration map and local tile history
         self.explore_map = np.zeros(MAP_OBS_SHAPE, dtype=np.uint8)
+        self.tile_visits.clear()
+        self._player_position = memory.get_position(self.pyboy)
 
         # Clear frame stack
         self.frame_stack = np.zeros_like(self.frame_stack)
@@ -818,10 +826,16 @@ class KantoRedEnv(gym.Env):
         self._new_event_indices = newly_set.tolist()
         self._prev_events = events.copy()
 
+        local_map = None
+        if "local_map" in self.config.obs_components:
+            map_id, x, y = self._player_position or memory.get_position(self.pyboy)
+            local_map = build_local_map(self.tile_visits, map_id, x, y)
+
         ctx = ObsContext(
             pyboy=self.pyboy,
             frame_stack=self.frame_stack if self._want_screens else None,
             explore_map=self.explore_map,
+            local_map=local_map,
             recent_actions=self.recent_actions,
             event_flags=events,
             badge_flags=badge_flags,
@@ -877,6 +891,10 @@ class KantoRedEnv(gym.Env):
         """
         # Get current position (map_id, local_x, local_y)
         map_id, x, y = memory.get_position(self.pyboy)
+
+        # Per-tile history for the local centered map
+        self.tile_visits.add((map_id, x, y))
+        self._player_position = (map_id, x, y)
 
         # Convert to global Kanto coordinates
         global_x, global_y = local_to_global(map_id, x, y)

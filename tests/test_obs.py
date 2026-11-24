@@ -16,6 +16,7 @@ from kantorl.obs import (
     ACTION_HISTORY_LEN,
     DEFAULT_OBS_COMPONENTS,
     EVENT_OBS_DIM,
+    LOCAL_MAP_SIZE,
     MAP_OBS_SHAPE,
     OBS_COMPONENTS,
     ObsContext,
@@ -25,9 +26,11 @@ from kantorl.obs.producers import (
     EventsProducer,
     HealthProducer,
     LevelProducer,
+    LocalMapProducer,
     MapProducer,
     RecentActionsProducer,
     ScreenProducer,
+    build_local_map,
 )
 
 
@@ -54,8 +57,8 @@ def make_context(**overrides: object) -> ObsContext:
 
 
 def test_default_components_match_registry() -> None:
-    """The config default must stay in sync with the producer registry."""
-    assert DEFAULT_OBS_COMPONENTS == OBS_COMPONENTS
+    """The legacy default is a subset; the local map is opt-in."""
+    assert set(DEFAULT_OBS_COMPONENTS).issubset(OBS_COMPONENTS)
     assert set(DEFAULT_OBS_COMPONENTS) == {
         "screens",
         "health",
@@ -65,6 +68,8 @@ def test_default_components_match_registry() -> None:
         "map",
         "recent_actions",
     }
+    assert "local_map" in OBS_COMPONENTS
+    assert "local_map" not in DEFAULT_OBS_COMPONENTS
 
 
 def test_build_producers_preserves_config_order() -> None:
@@ -198,7 +203,47 @@ def test_level_producer_empty_party_is_zero() -> None:
 def test_flag_and_map_spaces() -> None:
     assert EventsProducer().space().n == EVENT_OBS_DIM
     assert MapProducer().space().shape == MAP_OBS_SHAPE
+    assert LocalMapProducer().space().shape == (LOCAL_MAP_SIZE, LOCAL_MAP_SIZE)
     assert list(RecentActionsProducer().space().nvec) == [8] * ACTION_HISTORY_LEN
+
+
+def test_local_map_is_centered_and_map_scoped() -> None:
+    center = LOCAL_MAP_SIZE // 2
+    visits = {(61, 10, 10), (61, 11, 10), (61, 10, 11), (62, 10, 10)}
+
+    view = build_local_map(visits, 61, 10, 10)
+    assert view.dtype == np.uint8
+    assert view[center, center] == 128
+    assert view[center, center + 1] == 255  # (11, 10), right of the player
+    assert view[center + 1, center] == 255  # (10, 11), below the player
+    assert view[center, center - 1] == 0
+    assert np.sum(view == 255) == 2  # map 62's visit must not leak in
+
+    moved = build_local_map(visits, 61, 11, 10)
+    assert moved[center, center] == 128
+    assert moved[center, center - 1] == 255  # (10, 10) is now left of player
+    assert moved[center, center + 1] == 0
+
+
+def test_local_map_producer_reads_context() -> None:
+    window = np.zeros((LOCAL_MAP_SIZE, LOCAL_MAP_SIZE), dtype=np.uint8)
+    producer = LocalMapProducer()
+    assert producer.read(make_context(local_map=window)) is window
+
+
+def test_env_space_includes_opt_in_local_map() -> None:
+    config = KantoConfig(
+        rom_path="fake.gb",
+        obs_components=(*DEFAULT_OBS_COMPONENTS, "local_map"),
+    )
+    env = KantoRedEnv(config=config)
+    try:
+        assert env.observation_space["local_map"].shape == (
+            LOCAL_MAP_SIZE,
+            LOCAL_MAP_SIZE,
+        )
+    finally:
+        env.close()
 
 
 def test_producers_raise_when_context_field_is_missing() -> None:

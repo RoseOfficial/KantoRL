@@ -215,7 +215,12 @@ kantorl train pokemon_red.gb --obs screens health events
 | `badges` | `MultiBinary(8)` | Per-badge flags |
 | `events` | `MultiBinary(2560)` | Full event-flag bitfield (progress oracle) |
 | `map` | `Box(0, 255, (48, 48))` | Exploration bitmap |
+| `local_map` | `Box(0, 255, (15, 15))` | Visited-tile window centered on the player (opt-in) |
 | `recent_actions` | `MultiDiscrete([8]*3)` | Last three actions |
+
+`local_map` is opt-in and not part of the legacy default. It is one cell per
+tile rather than the global map's ~9x9 tiles per cell, so indoor rooms and
+corridors keep their shape.
 
 In Python:
 

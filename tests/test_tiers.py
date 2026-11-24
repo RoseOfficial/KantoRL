@@ -140,6 +140,16 @@ def test_h60_lr5e5_tier_combines_the_longest_horizon_and_slowest_rate() -> None:
     assert config.resume_learning_rate == 5e-5
 
 
+def test_local_map_tier_adds_only_the_local_map() -> None:
+    base = load_tier("t2_levelmax_h60_lr5e5").config
+    local = load_tier("t2_levelmax_h60_lr5e5_lmap").config
+
+    assert local["obs_components"] == [*base["obs_components"], "local_map"]
+    for key, value in base.items():
+        if key != "obs_components":
+            assert local[key] == value
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])

@@ -1,7 +1,8 @@
 """Concrete observation producers.
 
 Each class reads exactly one entry of the observation dict. The default set
-reproduces the original hard-coded observation exactly:
+reproduces the original hard-coded observation exactly; ``local_map`` is
+opt-in:
 
 ====================  ==========================================  ==================
 Key                   Meaning                                     Space
@@ -12,6 +13,7 @@ Key                   Meaning                                     Space
 ``badges``            Per-badge binary flags                      ``(8,)`` int8
 ``events``            Full event-flag bitfield                    ``(2560,)`` int8
 ``map``               48x48 visited-coordinate bitmap             ``(48, 48)`` uint8
+``local_map``         15x15 visited-tile window around player     ``(15, 15)`` uint8
 ``recent_actions``    Last three action indices                   ``(3,)`` int64
 ====================  ==========================================  ==================
 
@@ -37,6 +39,13 @@ EVENT_OBS_DIM = 2560
 
 # Downscaled exploration bitmap shape.
 MAP_OBS_SHAPE = (48, 48)
+
+# Local visited-tile window around the player. Unlike ``map`` (48x48 global
+# cells, each ~9x9 tiles), this is one cell per tile and moves with the player,
+# so indoor rooms and corridors keep their true shape.
+LOCAL_MAP_SIZE = 15
+LOCAL_MAP_CENTER = LOCAL_MAP_SIZE // 2
+LOCAL_MAP_PLAYER = 128
 
 # Number of party levels encoded by LevelProducer.
 LEVEL_OBS_DIM = 8
@@ -188,6 +197,51 @@ class MapProducer:
 
     def read(self, ctx: ObsContext) -> np.ndarray:
         return _require(ctx.explore_map, "explore_map")
+
+
+def build_local_map(
+    tile_visits: set[tuple[int, int, int]],
+    map_id: int,
+    x: int,
+    y: int,
+    size: int = LOCAL_MAP_SIZE,
+) -> np.ndarray:
+    """Render the visited tiles around ``(map_id, x, y)`` at one tile per cell.
+
+    The player is always at the center, so the policy does not have to learn
+    where a global marker sits inside a 48x48 image. Visits are keyed by map,
+    so another map's tiles cannot leak into the window.
+    """
+    center = size // 2
+    view = np.zeros((size, size), dtype=np.uint8)
+    for row in range(size):
+        world_y = y + row - center
+        for col in range(size):
+            world_x = x + col - center
+            if (map_id, world_x, world_y) in tile_visits:
+                view[row, col] = 255
+    view[center, center] = LOCAL_MAP_PLAYER
+    return view
+
+
+class LocalMapProducer:
+    """15x15 visited-tile window centered on the player's current tile."""
+
+    key = "local_map"
+
+    def space(self) -> spaces.Space[Any]:
+        return spaces.Box(
+            low=0,
+            high=255,
+            shape=(LOCAL_MAP_SIZE, LOCAL_MAP_SIZE),
+            dtype=np.uint8,
+        )
+
+    def reset(self) -> None:
+        """No cached state; the environment owns the window."""
+
+    def read(self, ctx: ObsContext) -> np.ndarray:
+        return _require(ctx.local_map, "local_map")
 
 
 class RecentActionsProducer:

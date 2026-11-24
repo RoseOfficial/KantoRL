@@ -1,0 +1,53 @@
+# Continuation of the 99M policy with a local tile-resolution map.
+#
+# The 99M policy reaches Mt. Moon B2F but spends 28k steps in two rooms and
+# never visits the Super Nerd trigger at (13, 8). The global 48x48 map is ~9x9
+# tiles per cell, so the fossil room is smaller than one cell. This tier adds
+# an opt-in 15x15 visited-tile window centered on the player; everything else
+# (reward, horizon, learning rate) is unchanged, and the policy is warm-started
+# from 99M by scripts/transfer_local_map.py.
+name: t2_levelmax_h60_lr5e5_lmap
+
+description: >
+  99M policy plus a 15x15 local visited-tile map at 5e-5 and a 61,440-step
+  horizon. Same reward; the local map is the only new observation.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+    - local_map
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.00005
+  resume_learning_rate: 0.00005
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 104000000
+  reward_fn: default
+  seed: 43

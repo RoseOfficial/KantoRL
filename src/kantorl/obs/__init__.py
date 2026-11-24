@@ -23,11 +23,13 @@ from kantorl.obs.producers import (
     ACTION_HISTORY_LEN,
     EVENT_OBS_DIM,
     LEVEL_OBS_DIM,
+    LOCAL_MAP_SIZE,
     MAP_OBS_SHAPE,
     BadgesProducer,
     EventsProducer,
     HealthProducer,
     LevelProducer,
+    LocalMapProducer,
     MapProducer,
     RecentActionsProducer,
     ScreenProducer,
@@ -53,13 +55,15 @@ _FACTORIES: dict[str, Callable[[Any], ObsProducer]] = {
     "badges": lambda cfg: BadgesProducer(),
     "events": lambda cfg: EventsProducer(),
     "map": lambda cfg: MapProducer(),
+    "local_map": lambda cfg: LocalMapProducer(),
     "recent_actions": lambda cfg: RecentActionsProducer(),
 }
 
-# Every component name, in the order used by the default observation.
+# Every registered component name. ``local_map`` is opt-in: it is not part of
+# the legacy default, so existing checkpoints keep their exact observation.
 OBS_COMPONENTS: tuple[str, ...] = tuple(_FACTORIES)
 
-if set(DEFAULT_OBS_COMPONENTS) != set(OBS_COMPONENTS):
+if not set(DEFAULT_OBS_COMPONENTS).issubset(OBS_COMPONENTS):
     raise RuntimeError("DEFAULT_OBS_COMPONENTS and producer registry have drifted")
 
 
@@ -91,6 +95,7 @@ __all__ = [
     "DEFAULT_OBS_COMPONENTS",
     "EVENT_OBS_DIM",
     "LEVEL_OBS_DIM",
+    "LOCAL_MAP_SIZE",
     "MAP_OBS_SHAPE",
     "OBS_COMPONENTS",
     "ObsContext",
