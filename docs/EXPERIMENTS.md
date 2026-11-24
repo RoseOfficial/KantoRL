@@ -805,3 +805,40 @@ only sees the rare attempts that reach them before truncation.
 This is the trigger agreed for the horizon change: raise `max_steps` to
 40,960, keep the 1e-4 learning rate, and seed from the retained best rather
 than the regressed final. Mt. Moon and Cerulean remain 0/10.
+
+## 40k horizon: Route 3 clears, Mt. Moon opens
+
+Seeded the retained 49.91M best into `t2_levelmax_h40_lr1e4` (40,960 cap,
+20,480 stagnation, 1e-4) and trained 10M steps to 60M.
+
+Final 60M, 10 episodes of 40,960:
+
+| milestone | result | median |
+|---|---:|---:|
+| Boulder Badge | 9/10 | 13,593 |
+| Route 3 | 9/10 | 13,876 |
+| Route 3 trainer 6 | 7/10 | 18,494 |
+| Route 3 trainer 7 | 7/10 | 20,193 |
+| Mt. Moon 1 trainer 3 | 7/10 | 27,814 |
+| Mt. Moon 1 trainer 4 | 7/10 | 26,406 |
+
+Retained best (59.83M, first Mt. Moon 3 Trainer 1):
+
+| milestone | result | median |
+|---|---:|---:|
+| Boulder Badge | 9/10 | 11,680 |
+| Route 3 trainer 6 | **9/10** | 15,967 |
+| Route 3 trainer 7 | **9/10** | 16,821 |
+| Mt. Moon 1 trainer 4 | **9/10** | 18,652 |
+| Mt. Moon 1 trainer 5 | **9/10** | 18,952 |
+| Mt. Moon 3 trainer 1 | 1/10 | 26,755 |
+
+Cerulean and Misty remain 0/10.
+
+The 20k cap was the binding constraint: doubling it took Route 3 trainers 6
+and 7 from 0-50% to 70-90% and carried the policy into Mt. Moon, where it now
+beats late trainers. The badge rate dipped from 10/10 to 9/10 and the median
+slowed, a deliberate trade of early-game speed for post-Brock depth.
+
+The next step is the same pattern: seed a 70M continuation from the 59.83M
+best and target the Mt. Moon exit and Cerulean.
