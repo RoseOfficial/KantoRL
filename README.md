@@ -43,6 +43,12 @@ report fake level-89 party members. The checkpoint still scores 10/10 under the
 corrected reads. See [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) for the 100M
 collapse and the fix.
 
+These numbers are a **development lineage**: cumulative steps with
+human-in-the-loop horizon, learning-rate, observation and checkpoint changes.
+Seeds 0-9 are used for development; seeds 10-19 are reserved for the final
+fixed-ruleset measurement. The clean from-scratch run, not the best intermediate
+checkpoint, is the headline sample-efficiency result.
+
 
 ## Setup
 
@@ -313,6 +319,10 @@ policy when a milestone is first reached:
 - `checkpoints/best_model.zip` — updated on each new event or badge.
 - `checkpoints/badge_<n>_model.zip` — immutable snapshot at the first n-th badge.
 - matching `_vecnormalize.pkl` and `_step.txt` files.
+
+Dense cumulative checkpoints are pruned to the latest ~10M-step window plus
+every 1M-step lineage mark; named snapshots and their normalizers are never
+pruned. This keeps 1B steps at ~35 GB instead of ~320 GB.
 
 `scripts/eval_runs.py --best` evaluates `best_model.zip` into `eval_best/`
 without overwriting the latest-checkpoint report. The peak is worth keeping:

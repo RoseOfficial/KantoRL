@@ -78,6 +78,9 @@ class CumulativeCheckpointCallback(BaseCallback):
         save_freq (int): Save a checkpoint every N steps.
         name_prefix (str): Prefix for checkpoint filenames.
         verbose (int): Verbosity level (0=silent, 1=print saves).
+        keep_latest (int): Recent checkpoints to keep at ``save_freq`` spacing.
+        keep_every (int): Keep every checkpoint whose step is a multiple of this.
+                          Set either retention argument to 0 to disable that rule.
 
     Example:
         >>> callback = CumulativeCheckpointCallback(
@@ -93,6 +96,11 @@ class CumulativeCheckpointCallback(BaseCallback):
         - Checkpoints are saved as .zip files containing model weights and config
         - The save_path directory is created if it doesn't exist
         - Step counts are cumulative across resumed training sessions
+        - Dense old checkpoints are pruned: the latest ``keep_latest`` are kept
+          for the current wave (~10M steps at 100k spacing), every
+          ``keep_every`` step survives for the lineage, and named snapshots
+          (``best_model``, ``badge_*_model``) are never touched. At 1B steps
+          this is ~35 GB instead of ~320 GB.
     """
 
     def __init__(
@@ -102,6 +110,8 @@ class CumulativeCheckpointCallback(BaseCallback):
         name_prefix: str = "model",
         verbose: int = 1,
         vec_normalize: VecNormalize | None = None,
+        keep_latest: int = 100,
+        keep_every: int = 1_000_000,
     ):
         """
         Initialize the checkpoint callback.
@@ -117,14 +127,21 @@ class CumulativeCheckpointCallback(BaseCallback):
                           (obs mean/var, reward mean/var) are saved alongside each
                           model checkpoint. Required for correct reward scaling on
                           resume.
+            keep_latest: Number of most recent sparse checkpoints to retain.
+            keep_every: Retain checkpoints at multiples of this many steps.
         """
         super().__init__(verbose)
+
+        if keep_latest < 0 or keep_every < 0:
+            raise ValueError("keep_latest and keep_every must be non-negative")
 
         # Convert string path to Path object for consistent handling
         self.save_path = Path(save_path)
         self.save_freq = save_freq
         self.name_prefix = name_prefix
         self.vec_normalize = vec_normalize
+        self.keep_latest = keep_latest
+        self.keep_every = keep_every
 
         # Create the checkpoint directory if it doesn't exist
         # parents=True creates intermediate directories, exist_ok=True ignores if exists
@@ -161,8 +178,43 @@ class CumulativeCheckpointCallback(BaseCallback):
             if self.verbose:
                 print(f"Saved checkpoint: {path}")
 
+            # Keep a dense window for the current wave plus 1M-scale lineage
+            # marks. Without this, 100k checkpoints at 1B steps need ~320 GB.
+            self._prune()
+
         # Always continue training
         return True
+
+    def _prune(self) -> None:
+        """Delete dense old checkpoints, preserving the recent window and marks.
+
+        The latest ``keep_latest`` checkpoints (10M steps at 100k spacing) are
+        kept for sweeps inside the current wave. Every checkpoint at a multiple
+        of ``keep_every`` is kept as the long-term lineage. Named snapshots do
+        not match ``{prefix}_*.zip`` and are never touched.
+        """
+        if self.keep_latest == 0 and self.keep_every == 0:
+            return
+
+        checkpoints: list[tuple[int, Path]] = []
+        for path in self.save_path.glob(f"{self.name_prefix}_*.zip"):
+            try:
+                steps = int(path.stem.split("_")[-1])
+            except ValueError:
+                continue
+            checkpoints.append((steps, path))
+        checkpoints.sort(key=lambda item: item[0], reverse=True)
+
+        for index, (steps, path) in enumerate(checkpoints):
+            keep_recent = index < self.keep_latest
+            keep_lineage = self.keep_every > 0 and steps % self.keep_every == 0
+            if keep_recent or keep_lineage:
+                continue
+            try:
+                path.unlink()
+            except OSError:
+                # A checkpoint being read or copied must not stop training.
+                pass
 
     @classmethod
     def find_latest(

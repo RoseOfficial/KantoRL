@@ -16,6 +16,7 @@ import pytest
 import torch
 
 from kantorl.callbacks import (
+    CumulativeCheckpointCallback,
     FirstSeenCallback,
     TensorboardCallback,
     ThreadTuningCallback,
@@ -75,6 +76,50 @@ def test_non_cpu_device_is_left_alone():
 
 def test_on_step_continues_training():
     assert make_callback()._on_step() is True
+
+
+# =============================================================================
+# CHECKPOINT RETENTION
+# =============================================================================
+
+
+def test_cumulative_checkpoints_keep_recent_window_and_lineage_marks(tmp_path):
+    callback = CumulativeCheckpointCallback(
+        tmp_path,
+        save_freq=100_000,
+        keep_latest=3,
+        keep_every=1_000_000,
+        verbose=0,
+    )
+    steps = (900_000, 1_000_000, 1_100_000, 1_200_000, 1_300_000, 1_400_000, 1_500_000)
+    for step in steps:
+        (tmp_path / f"model_{step}.zip").write_bytes(b"checkpoint")
+    (tmp_path / "best_model.zip").write_bytes(b"keep")
+    (tmp_path / "badge_1_model.zip").write_bytes(b"keep")
+
+    callback._prune()
+
+    remaining = sorted(path.name for path in tmp_path.glob("model_*.zip"))
+    assert remaining == [
+        "model_1000000.zip",  # 1M lineage mark
+        "model_1300000.zip",  # recent window
+        "model_1400000.zip",
+        "model_1500000.zip",
+    ]
+    assert (tmp_path / "best_model.zip").exists()
+    assert (tmp_path / "badge_1_model.zip").exists()
+
+
+def test_cumulative_prune_ignores_unparseable_names(tmp_path):
+    callback = CumulativeCheckpointCallback(
+        tmp_path, keep_latest=1, keep_every=1_000_000, verbose=0
+    )
+    (tmp_path / "model_1000000.zip").write_bytes(b"keep")
+    (tmp_path / "model_latest.zip").write_bytes(b"keep")
+
+    callback._prune()
+
+    assert (tmp_path / "model_latest.zip").exists()
 
 
 # =============================================================================

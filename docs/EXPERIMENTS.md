@@ -992,3 +992,33 @@ at the first sustained `badges_mean` collapse instead of running to the target.
 If Mt. Moon still stalls, the remaining suspects are the coarse 9x9 global map
 for indoor mazes and the level reward paying for battles rather than the
 Mt. Moon exit.
+
+## Development vs. final measurement
+
+The 10M waves are a development process, not a single fixed-ruleset run. The
+rules from here:
+
+- Development uses seeds 0-9. Seeds 10-19 are held out for the final
+  measurement and must not be used for checkpoint selection.
+- Every change (horizon, learning rate, reward, observation, checkpoint
+  selection) is logged with the evaluation that motivated it. Total compute
+  counts all runs, not just the winning lineage.
+- Checkpoint retention: the latest 100 checkpoints (~10M steps at 100k
+  spacing) are kept for the current wave, every 1M checkpoint is kept for the
+  lineage, and `best_model` / `badge_<n>_model` snapshots are permanent. At 1B
+  steps this is ~35 GB instead of ~320 GB.
+- The current 99M/104M lineage is development. The headline result is a clean
+  fixed-ruleset run: fixed observation, reward, horizon and learning rate;
+  pre-registered checkpoint selection; trained from scratch; evaluated on
+  seeds 10-19.
+- Trigger the clean control when the game is completed, or if the frontier
+  stalls for three waves without a new event. In the stall case, use the
+  control to test the suspect prior rather than adding more waves.
+- Until then, any capability claim is "development lineage, N cumulative
+  steps, human-staged."
+
+The retrospective analysis (first-seen logs, evaluation reports, tier YAMLs,
+TensorBoard) is observational: the waves change several things at once and
+start from different checkpoints. It can identify which changes coincided with
+progress, not prove which prior was load-bearing. The clean run is the causal
+claim.
