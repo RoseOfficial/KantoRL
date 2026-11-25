@@ -1252,3 +1252,35 @@ The fixed 1e-4 from-scratch schedule does not reproduce the 99M policy. The
 result. The gamma-0.999 104M final remains the warm-start speed/reliability
 alternative. No further warm-start or from-scratch run is planned without a
 new method.
+
+## Final state
+
+The development program stops here. The **99M checkpoint** is the deepest
+development policy: Boulder 10/10, Route 3 10/10, Mt. Moon 3 Trainer 2 9/10,
+Mt. Moon B2F 10/10. The **gamma-0.999 104M final** is the warm-start
+speed/reliability alternative: Boulder 10/10 at 5,160, Route 3 10/10,
+Mt. Moon 3 t2 10/10, B2F 10/10. The full game was not reached: Trainer 3,
+the Exit Super Nerd, and Cerulean remain 0/10.
+
+The **clean from-scratch confirmation failed**: the 1e-4 schedule was stopped
+at 24.1M with the 10M, 20M, and 24.1M checkpoints at **0/3 Boulder**. The 99M
+is therefore a path-dependent development result, not a clean
+sample-efficiency claim. The warm-start priors (local visited map, reward
+rebalance, player marker, tile-ID map) all regressed; the only positive
+method change was gamma 0.999.
+
+What the project established:
+
+- The map is the load-bearing observation: pixels-only fails, and the global
+  map enables the early game.
+- The coarse 48x48 map (~9x9 tiles per cell) is the indoor ceiling; minimal
+  local maps and a player marker do not fix Mt. Moon.
+- The 99M development lineage is not reproducible from scratch with the
+  current fixed schedule; the clean run fails before Brock.
+- The level/explore reward balance, local maps, marker, and tile map are not
+  load-bearing at this stage; gamma 0.999 is a speed/reliability win.
+
+Artifacts: `runs/best/red_99M_s43.zip` (deepest) and
+`runs/best/red_gamma_104M_s43.zip` (speed). A future phase should test a
+larger map prior (tile-level walkability) or a different algorithm from
+scratch, not another warm-start.

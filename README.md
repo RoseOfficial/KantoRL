@@ -74,6 +74,16 @@ A clean from-scratch run of the final ruleset was stopped at 24.1M: the
 badge was training-only. The 99M policy remains a path-dependent development
 result, not a clean from-scratch confirmation.
 
+### Where this leaves the project
+
+The 99M policy is the deepest development result; the gamma-104M final is the
+speed/reliability alternative. The clean from-scratch confirmation failed, so
+the 99M is a path-dependent development result rather than a clean
+sample-efficiency claim. The full game was not reached: Trainer 3, the Exit
+Super Nerd, and Cerulean remain unreached, and the coarse 48x48 map is the
+indoor ceiling. A future phase would need a larger map prior or a different
+algorithm, not another warm-start.
+
 
 ## Setup
 
