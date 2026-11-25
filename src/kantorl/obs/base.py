@@ -37,6 +37,7 @@ class ObsContext:
         frame_stack: ``(frame_stacks, height, width)`` grayscale frames.
         explore_map: ``(48, 48)`` bitmap of visited global coordinates.
         local_map: ``(15, 15)`` visited-tile window centered on the player.
+        local_tiles: ``(15, 15)`` raw screen tile IDs centered on the player.
         recent_actions: Last ``ACTION_HISTORY_LEN`` action indices.
         event_flags: ``(EVENT_OBS_DIM,)`` binary event flags.
         badge_flags: ``(8,)`` binary gym badge flags.
@@ -49,6 +50,7 @@ class ObsContext:
     frame_stack: np.ndarray | None = None
     explore_map: np.ndarray | None = None
     local_map: np.ndarray | None = None
+    local_tiles: np.ndarray | None = None
     recent_actions: np.ndarray | None = None
     event_flags: np.ndarray | None = None
     badge_flags: np.ndarray | None = None

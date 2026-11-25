@@ -74,7 +74,7 @@ from kantorl.obs import (
     ObsContext,
     build_producers,
 )
-from kantorl.obs.producers import build_local_map
+from kantorl.obs.producers import build_local_map, crop_tile_map
 from kantorl.rewards import GameState, RewardFunction, create_reward
 
 # =============================================================================
@@ -849,6 +849,12 @@ class KantoRedEnv(gym.Env):
             map_id, x, y = self._player_position or memory.get_position(self.pyboy)
             local_map = build_local_map(self.tile_visits, map_id, x, y)
 
+        local_tiles = None
+        if "local_tiles" in self.config.obs_components:
+            tile_map = memory.get_tile_map(self.pyboy)
+            center_x, center_y = memory.get_player_screen_tile(self.pyboy)
+            local_tiles = crop_tile_map(tile_map, center_x, center_y)
+
         map_obs = self.explore_map
         if self.config.map_player_marker and self._player_explore_cell is not None:
             map_obs = apply_player_marker(self.explore_map, self._player_explore_cell)
@@ -858,6 +864,7 @@ class KantoRedEnv(gym.Env):
             frame_stack=self.frame_stack if self._want_screens else None,
             explore_map=map_obs,
             local_map=local_map,
+            local_tiles=local_tiles,
             recent_actions=self.recent_actions,
             event_flags=events,
             badge_flags=badge_flags,

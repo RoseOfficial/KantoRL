@@ -14,6 +14,7 @@ Key                   Meaning                                     Space
 ``events``            Full event-flag bitfield                    ``(2560,)`` int8
 ``map``               48x48 visited-coordinate bitmap             ``(48, 48)`` uint8
 ``local_map``         15x15 visited-tile window around player     ``(15, 15)`` uint8
+``local_tiles``       15x15 raw screen tile-ID window             ``(15, 15)`` uint8
 ``recent_actions``    Last three action indices                   ``(3,)`` int64
 ====================  ==========================================  ==================
 
@@ -46,6 +47,10 @@ MAP_OBS_SHAPE = (48, 48)
 LOCAL_MAP_SIZE = 15
 LOCAL_MAP_CENTER = LOCAL_MAP_SIZE // 2
 LOCAL_MAP_PLAYER = 128
+
+# Local tile-ID window from the 20x18 screen tilemap. One cell per tile, with
+# raw tileset IDs (walls, floor, doors, water); no sprites, warps or ledges.
+LOCAL_TILES_SIZE = 15
 
 # Number of party levels encoded by LevelProducer.
 LEVEL_OBS_DIM = 8
@@ -242,6 +247,53 @@ class LocalMapProducer:
 
     def read(self, ctx: ObsContext) -> np.ndarray:
         return _require(ctx.local_map, "local_map")
+
+
+def crop_tile_map(
+    tile_map: np.ndarray,
+    center_x: int,
+    center_y: int,
+    size: int = LOCAL_TILES_SIZE,
+) -> np.ndarray:
+    """Crop a ``size x size`` window centered on a screen tile.
+
+    The visible tilemap is 20x18, so the window is zero-padded near the screen
+    edges. Values are raw tileset tile IDs; the caller does not need to know
+    walkability.
+    """
+    half = size // 2
+    view = np.zeros((size, size), dtype=np.uint8)
+    top = center_y - half
+    left = center_x - half
+    for row in range(size):
+        source_y = top + row
+        if source_y < 0 or source_y >= tile_map.shape[0]:
+            continue
+        for col in range(size):
+            source_x = left + col
+            if 0 <= source_x < tile_map.shape[1]:
+                view[row, col] = tile_map[source_y, source_x]
+    return view
+
+
+class LocalTilesProducer:
+    """15x15 raw tile-ID window centered on the player's screen tile."""
+
+    key = "local_tiles"
+
+    def space(self) -> spaces.Space[Any]:
+        return spaces.Box(
+            low=0,
+            high=255,
+            shape=(LOCAL_TILES_SIZE, LOCAL_TILES_SIZE),
+            dtype=np.uint8,
+        )
+
+    def reset(self) -> None:
+        """No cached state; the environment owns the window."""
+
+    def read(self, ctx: ObsContext) -> np.ndarray:
+        return _require(ctx.local_tiles, "local_tiles")
 
 
 class RecentActionsProducer:

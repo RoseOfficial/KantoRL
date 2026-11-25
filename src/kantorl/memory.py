@@ -943,6 +943,23 @@ PARTY_MON_STRIDE = 44
 # Note: Contains the tile type the player would step onto / interact with
 ADDR_TILE_IN_FRONT = 0xCFC6
 
+# Visible 20x18 screen tilemap (BG tile IDs after the tileset mapping).
+# Address: 0xC3A0
+# Size: 360 bytes (20 columns x 18 rows)
+# Source: pokered disassembly (wTileMap)
+# Note: Includes walls, floor, doors, water, and menu text boxes. It does not
+# include sprites; those are OAM objects.
+ADDR_TILE_MAP = 0xC3A0
+TILE_MAP_WIDTH = 20
+TILE_MAP_HEIGHT = 18
+
+# Player sprite screen position in pixels. The sprite is 16x16, so the tile
+# the player stands on is the center of the sprite: ((pixel + 8) // 8).
+# Addresses: 0xC104 (Y pixels), 0xC106 (X pixels)
+# Source: pokered disassembly (wSpritePlayerStateData1YPixels/XPixels)
+ADDR_SPRITE_PLAYER_Y_PIXELS = 0xC104
+ADDR_SPRITE_PLAYER_X_PIXELS = 0xC106
+
 # Walk/Bike/Surf state
 # Address: 0xD700
 # Size: 1 byte
@@ -1101,6 +1118,31 @@ def get_tile_in_front(pyboy: "PyBoy") -> int:
         - Used by HM automation to trigger Cut/Surf/Strength
     """
     return read_byte(pyboy, ADDR_TILE_IN_FRONT)
+
+
+def get_tile_map(pyboy: "PyBoy") -> np.ndarray:
+    """Return the visible 20x18 screen tilemap as a ``(18, 20)`` uint8 array.
+
+    The values are the tileset tile IDs after the block-to-tile mapping: walls,
+    floor, doors, water, and menu text boxes. Sprites are OAM objects and are
+    not included.
+    """
+    raw = pyboy.memory[
+        ADDR_TILE_MAP : ADDR_TILE_MAP + TILE_MAP_WIDTH * TILE_MAP_HEIGHT
+    ]
+    return np.asarray(raw, dtype=np.uint8).reshape(TILE_MAP_HEIGHT, TILE_MAP_WIDTH)
+
+
+def get_player_screen_tile(pyboy: "PyBoy") -> tuple[int, int]:
+    """Return the ``(x, y)`` screen tile at the center of the player sprite.
+
+    The sprite is 16x16 pixels, so its center is ``(pixels + 8) // 8`` in tile
+    coordinates. The visible tilemap is 20x18, so the crop can go out of bounds
+    near a screen edge; callers should pad.
+    """
+    x_pixels = read_byte(pyboy, ADDR_SPRITE_PLAYER_X_PIXELS)
+    y_pixels = read_byte(pyboy, ADDR_SPRITE_PLAYER_Y_PIXELS)
+    return (x_pixels + 8) // 8, (y_pixels + 8) // 8
 
 
 def party_has_move(pyboy: "PyBoy", move_id: int) -> bool:

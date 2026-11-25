@@ -1181,3 +1181,14 @@ marker do not fix the indoor maze. The next phase is either:
 
 Another small prior is not warranted. Artifacts: `runs/best/red_99M_s43.zip`
 (deepest) and `runs/best/red_gamma_104M_s43.zip` (speed/reliability).
+
+## 104M local tile map: development
+
+Started from 99M with an opt-in 15x15 raw tile-ID window (`local_tiles`) read
+from the visible 20x18 screen tilemap, one cell per tile, centered on the
+player's sprite. The values are raw tileset tile IDs (walls, floor, doors,
+water); no sprites, warps, ledges or route knowledge are added. The
+observation shape grows by one 15x15 branch; the 99M policy is warm-started
+through `scripts/transfer_local_map.py --new-component local_tiles` with
+parity 0.0 on an empty window. Reward, gamma and horizon match the 99M
+baseline; the rate is 2e-5. Result pending.

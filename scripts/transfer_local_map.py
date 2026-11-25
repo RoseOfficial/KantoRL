@@ -1,7 +1,8 @@
-"""Warm-start a checkpoint with the opt-in ``local_map`` observation.
+"""Warm-start a checkpoint with an opt-in observation component.
 
 Adding an observation key changes the extractor's fused width, so a plain
-``PPO.load`` cannot resume. This script:
+``PPO.load`` cannot resume. This script adds one component (``local_map`` or
+``local_tiles``):
 
 1. Loads the old policy.
 2. Builds a new policy whose observation space includes ``local_map``.
@@ -132,6 +133,11 @@ def main() -> None:
     parser.add_argument("--old-checkpoint", required=True)
     parser.add_argument("--old-tier", default="t2_levelmax_h60_lr5e5")
     parser.add_argument("--new-tier", default="t2_levelmax_h60_lr5e5_lmap")
+    parser.add_argument(
+        "--new-component",
+        default="local_map",
+        help="Observation key added by the new tier (local_map or local_tiles)",
+    )
     parser.add_argument("--old-steps", type=int, required=True)
     parser.add_argument("--out", required=True, help="New run directory")
     parser.add_argument("--rom", required=True)
@@ -182,6 +188,11 @@ def main() -> None:
     old_offsets = _branch_offsets(old_model.policy.features_extractor)
     new_offsets = _branch_offsets(new_model.policy.features_extractor)
     new_keys = [key for key in new_offsets if key not in old_offsets]
+    if args.new_component not in new_keys:
+        raise RuntimeError(
+            f"new component {args.new_component!r} is missing from the new "
+            f"space; new branches: {new_keys}"
+        )
     old_width = old_sd[HEAD_WEIGHTS[0]].shape[1]
     new_width = new_sd[HEAD_WEIGHTS[0]].shape[1]
     if new_width <= old_width:
@@ -210,11 +221,13 @@ def main() -> None:
     new_model.policy.load_state_dict(new_sd)
 
     # Parity check: on identical old observations the new extractor should be
-    # close to the old one when the local-map window is empty.
+    # close to the old one when the new component's window is empty.
     old_obs = _random_observations(old_model.observation_space)
     new_obs = dict(old_obs)
-    local_shape = new_model.observation_space["local_map"].shape
-    new_obs["local_map"] = torch.zeros((1, *local_shape), dtype=torch.float32)
+    local_shape = new_model.observation_space[args.new_component].shape
+    new_obs[args.new_component] = torch.zeros(
+        (1, *local_shape), dtype=torch.float32
+    )
     with torch.no_grad():
         old_features = old_model.policy.extract_features(old_obs)
         new_features = new_model.policy.extract_features(new_obs)
@@ -241,6 +254,7 @@ def main() -> None:
         "old_checkpoint": str(Path(args.old_checkpoint).resolve()),
         "old_tier": args.old_tier,
         "new_tier": args.new_tier,
+        "new_component": args.new_component,
         "old_steps": args.old_steps,
         "old_components": list(old_model.observation_space.spaces),
         "new_components": list(new_model.observation_space.spaces),

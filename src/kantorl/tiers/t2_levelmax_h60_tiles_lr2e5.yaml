@@ -1,0 +1,56 @@
+# Deliberate larger observation prior: local raw tile-ID map.
+#
+# The minimal prior ladder (visited map, reward rebalance, player marker) did
+# not break the Mt. Moon indoor loop. The global map is ~9x9 tiles per cell;
+# this tier adds a 15x15 window at one cell per tile, taken from the visible
+# screen tilemap. The values are raw tileset tile IDs (walls, floor, doors,
+# water); no sprites, warps, ledges or route knowledge are added.
+#
+# The 99M policy is warm-started through scripts/transfer_local_map.py with
+# --new-component local_tiles. Observation shape grows by one 15x15 branch;
+# reward, gamma and horizon match the 99M baseline, and the rate is 2e-5.
+name: t2_levelmax_h60_tiles_lr2e5
+
+description: >
+  99M continuation plus a 15x15 raw tile-ID window centered on the player.
+  Same reward, gamma and horizon; the local tiles are the only new prior.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+    - local_tiles
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.00002
+  resume_learning_rate: 0.00002
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 104000000
+  reward_fn: default
+  seed: 43

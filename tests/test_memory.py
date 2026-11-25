@@ -4,6 +4,8 @@ The old contiguous reads returned max-HP and stat bytes as levels, which
 showed up as fake level-89 party members in evaluation.
 """
 
+import numpy as np
+
 from kantorl import memory
 
 
@@ -13,7 +15,9 @@ class FakeMemory:
     def __init__(self) -> None:
         self.values: dict[int, int] = {}
 
-    def __getitem__(self, addr: int) -> int:
+    def __getitem__(self, addr: int | slice) -> int | list[int]:
+        if isinstance(addr, slice):
+            return [self.values.get(i, 0) for i in range(addr.start, addr.stop)]
         return self.values.get(addr, 0)
 
 
@@ -88,3 +92,25 @@ def test_party_reads_skip_empty_slots_but_keep_fainted() -> None:
     assert memory.get_party_levels(fake) == [15, 10]
     assert memory.get_party_hp(fake) == [(0, 30), (5, 20)]
     assert memory.get_total_party_hp(fake) == (5, 50)
+
+
+def test_tile_map_reads_the_20x18_screen() -> None:
+    fake = FakePyBoy()
+    for i in range(memory.TILE_MAP_WIDTH * memory.TILE_MAP_HEIGHT):
+        fake.memory.values[memory.ADDR_TILE_MAP + i] = i % 256
+
+    tile_map = memory.get_tile_map(fake)
+
+    assert tile_map.shape == (memory.TILE_MAP_HEIGHT, memory.TILE_MAP_WIDTH)
+    assert tile_map.dtype == np.uint8
+    assert tile_map[0, 0] == 0
+    assert tile_map[1, 0] == memory.TILE_MAP_WIDTH
+    assert tile_map[17, 19] == 359 % 256
+
+
+def test_player_screen_tile_uses_the_sprite_center() -> None:
+    fake = FakePyBoy()
+    fake.memory.values[memory.ADDR_SPRITE_PLAYER_X_PIXELS] = 64
+    fake.memory.values[memory.ADDR_SPRITE_PLAYER_Y_PIXELS] = 60
+
+    assert memory.get_player_screen_tile(fake) == (9, 8)

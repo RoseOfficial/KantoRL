@@ -17,6 +17,7 @@ from kantorl.obs import (
     DEFAULT_OBS_COMPONENTS,
     EVENT_OBS_DIM,
     LOCAL_MAP_SIZE,
+    LOCAL_TILES_SIZE,
     MAP_OBS_SHAPE,
     OBS_COMPONENTS,
     ObsContext,
@@ -27,10 +28,12 @@ from kantorl.obs.producers import (
     HealthProducer,
     LevelProducer,
     LocalMapProducer,
+    LocalTilesProducer,
     MapProducer,
     RecentActionsProducer,
     ScreenProducer,
     build_local_map,
+    crop_tile_map,
 )
 
 
@@ -70,6 +73,8 @@ def test_default_components_match_registry() -> None:
     }
     assert "local_map" in OBS_COMPONENTS
     assert "local_map" not in DEFAULT_OBS_COMPONENTS
+    assert "local_tiles" in OBS_COMPONENTS
+    assert "local_tiles" not in DEFAULT_OBS_COMPONENTS
 
 
 def test_build_producers_preserves_config_order() -> None:
@@ -243,6 +248,42 @@ def test_player_marker_marks_only_the_current_cell() -> None:
     assert base[7, 8] == 0
     assert np.count_nonzero(view) == 2
     assert KantoConfig(rom_path="fake.gb").map_player_marker is False
+
+
+def test_crop_tile_map_centers_and_zero_pads() -> None:
+    tile_map = np.arange(18 * 20, dtype=np.uint8).reshape(18, 20)
+
+    crop = crop_tile_map(tile_map, 5, 6)
+    assert crop.shape == (LOCAL_TILES_SIZE, LOCAL_TILES_SIZE)
+    assert crop[7, 7] == tile_map[6, 5]
+    assert crop[0, 0] == 0  # above and left of the visible screen
+    assert crop[1, 2] == tile_map[0, 0]
+
+    bottom_right = crop_tile_map(tile_map, 19, 17)
+    assert bottom_right[7, 7] == tile_map[17, 19]
+    assert bottom_right[8, 8] == 0  # below and right of the visible screen
+
+
+def test_local_tiles_producer_reads_context() -> None:
+    window = np.zeros((LOCAL_TILES_SIZE, LOCAL_TILES_SIZE), dtype=np.uint8)
+    producer = LocalTilesProducer()
+    assert producer.space().shape == (LOCAL_TILES_SIZE, LOCAL_TILES_SIZE)
+    assert producer.read(make_context(local_tiles=window)) is window
+
+
+def test_env_space_includes_opt_in_local_tiles() -> None:
+    config = KantoConfig(
+        rom_path="fake.gb",
+        obs_components=(*DEFAULT_OBS_COMPONENTS, "local_tiles"),
+    )
+    env = KantoRedEnv(config=config)
+    try:
+        assert env.observation_space["local_tiles"].shape == (
+            LOCAL_TILES_SIZE,
+            LOCAL_TILES_SIZE,
+        )
+    finally:
+        env.close()
 
 
 def test_env_space_includes_opt_in_local_map() -> None:
