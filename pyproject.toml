@@ -17,6 +17,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -46,8 +47,10 @@ curriculum = ["sb3-contrib>=2.0.0"]
 kantorl = "kantorl.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/kantorl"
-Repository = "https://github.com/yourusername/kantorl"
+Homepage = "https://github.com/RoseOfficial/KantoRL"
+Repository = "https://github.com/RoseOfficial/KantoRL"
+Releases = "https://github.com/RoseOfficial/KantoRL/releases"
+Experiments = "https://github.com/RoseOfficial/KantoRL/blob/main/docs/EXPERIMENTS.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kantorl"]

@@ -12,7 +12,9 @@
 A minimal, educational RL environment for Pokemon Red. Simple enough for students and hobbyists to understand and modify.
 
 Measured results, and the harness bugs found while getting them, are recorded in
-[docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
+[docs/EXPERIMENTS.md](docs/EXPERIMENTS.md). The short version is
+[docs/RESULTS.md](docs/RESULTS.md); the released checkpoints are documented in
+[docs/MODELS.md](docs/MODELS.md).
 
 ## Results so far
 
@@ -83,6 +85,13 @@ sample-efficiency claim. The full game was not reached: Trainer 3, the Exit
 Super Nerd, and Cerulean remain unreached, and the coarse 48x48 map is the
 indoor ceiling. A future phase would need a larger map prior or a different
 algorithm, not another warm-start.
+
+### Released checkpoints
+
+Both headline policies are published as release assets on the
+[releases page](https://github.com/RoseOfficial/KantoRL/releases); they are not
+committed to git (~33 MB each). See [docs/MODELS.md](docs/MODELS.md) for
+provenance, configuration and the exact evaluation command.
 
 
 ## Setup

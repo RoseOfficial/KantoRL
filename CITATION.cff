@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this environment, benchmark or checkpoints, cite this repository."
+title: "KantoRL: The MNIST of Pokemon Red for Reinforcement Learning"
+type: software
+authors:
+  - name: RoseOfficial
+repository-code: "https://github.com/RoseOfficial/KantoRL"
+url: "https://github.com/RoseOfficial/KantoRL"
+repository-artifact: "https://github.com/RoseOfficial/KantoRL/releases"
+license: other
+license-url: "https://github.com/RoseOfficial/KantoRL/blob/main/LICENSE"
+version: 0.1.0
+date-released: 2026-11-25
+abstract: >-
+  A minimal Gymnasium environment and PPO training harness for Pokemon Red.
+  The repository documents a measured early-game result, a clean from-scratch
+  confirmation failure, and the negative observation-prior probes that followed.
+keywords:
+  - reinforcement-learning
+  - pokemon
+  - ppo
+  - gymnasium
+  - benchmark
