@@ -1227,3 +1227,28 @@ Mt. Moon B2F reach, then lower Boulder median; evaluate the selected
 checkpoint on held-out seeds 10-19. `scripts/clean_select.py` implements the
 rule. The held-out report is the clean headline; the validation only picks
 the checkpoint. Result pending.
+
+## Clean from-scratch run: stopped at 24.1M (confirmation failed)
+
+The clean 100M run (legacy observation; LR 1e-4 until 78M then 5e-5; seed 43)
+was stopped at 24.1M because the pre-registered validation failed:
+
+| checkpoint | Boulder | Viridian Forest | Pewter |
+|---|---:|---:|---:|
+| 5.33M badge snapshot | 0/3 | -- | -- |
+| 5.79M best_model | 0/3 | -- | -- |
+| 10M | 0/3 | 2/3 | 0/3 |
+| 20M | 0/3 | 3/3 | 0/3 |
+| 24.1M | 0/3 | -- | -- |
+
+The 5.33M first badge was training-only. The 20M and 24.1M policies reached
+Viridian Forest in every seed but never Pewter. At 24.1M the training window
+was recovering (`badges_mean` 0.03 -> 0.31, Route 3 Trainer 6), but the
+checkpoint did not reproduce it from a fresh start. The 5e-5 drop at 78M was
+never reached.
+
+The fixed 1e-4 from-scratch schedule does not reproduce the 99M policy. The
+99M result is a path-dependent development lineage, not a clean from-scratch
+result. The gamma-0.999 104M final remains the warm-start speed/reliability
+alternative. No further warm-start or from-scratch run is planned without a
+new method.

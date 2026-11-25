@@ -69,9 +69,10 @@ A local tile-ID probe (104M) also regressed under warm-start (6/10 Boulder,
 Mt. Moon 3 t2 3/10, B2F 6/10); the 99M remains deepest. The warm-start
 fine-tunes are unstable, so a from-scratch clean run is the fair test.
 
-A clean from-scratch run of the final ruleset is in progress (100M, LR 1e-4
-until 78M then 5e-5, pre-registered selection, held-out seeds 10-19). Its
-result is the final measurement.
+A clean from-scratch run of the final ruleset was stopped at 24.1M: the
+10M, 20M and 24.1M checkpoints were **0/3 Boulder**, and the 5.33M first
+badge was training-only. The 99M policy remains a path-dependent development
+result, not a clean from-scratch confirmation.
 
 
 ## Setup
