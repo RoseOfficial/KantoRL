@@ -93,6 +93,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 from kantorl.callbacks import (
     CumulativeCheckpointCallback,
     FirstSeenCallback,
+    LearningRateDecayCallback,
     PerformanceCallback,
     StallDetectionCallback,
     TensorboardCallback,
@@ -730,6 +731,16 @@ def train(
         # ~28% faster than one fixed thread count on an 8C/16T machine.
         ThreadTuningCallback(rollout_threads=2),
     ]
+
+    # Fixed one-time LR drop for clean from-scratch runs. The schedule is
+    # declared in the tier and applied at the same step every time.
+    if config.lr_decay_step is not None and config.lr_decay_to is not None:
+        callback_list.append(
+            LearningRateDecayCallback(
+                decay_step=config.lr_decay_step,
+                decay_to=config.lr_decay_to,
+            )
+        )
 
     # Optionally add wandb callback for experiment tracking
     if wandb_run is not None:

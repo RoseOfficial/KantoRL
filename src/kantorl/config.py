@@ -278,6 +278,12 @@ class KantoConfig:
     # needs this rather than learning_rate. None keeps the checkpoint's rate.
     resume_learning_rate: float | None = None
 
+    # Optional one-time learning-rate drop for a clean from-scratch run. Both
+    # must be set together. This is fixed before training, not a per-wave knob:
+    # 1e-4 until 78M then 5e-5 is the final lineage's schedule.
+    lr_decay_step: int | None = None
+    lr_decay_to: float | None = None
+
     # Discount factor (gamma) for future rewards
     # 0.995 gives an effective horizon of ~200 steps (~80 seconds game time).
     # This is long enough for multi-room navigation but short enough to produce
@@ -534,6 +540,14 @@ class KantoConfig:
                 "resume_learning_rate must be > 0 or None, got "
                 f"{self.resume_learning_rate}."
             )
+        if (self.lr_decay_step is None) != (self.lr_decay_to is None):
+            raise ValueError("lr_decay_step and lr_decay_to must be set together")
+        if self.lr_decay_step is not None and self.lr_decay_step <= 0:
+            raise ValueError(
+                f"lr_decay_step must be > 0, got {self.lr_decay_step}."
+            )
+        if self.lr_decay_to is not None and self.lr_decay_to <= 0:
+            raise ValueError(f"lr_decay_to must be > 0, got {self.lr_decay_to}.")
         if self.stuck_penalty < 0:
             raise ValueError(
                 f"stuck_penalty must be >= 0, got {self.stuck_penalty}."

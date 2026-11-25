@@ -18,6 +18,7 @@ import torch
 from kantorl.callbacks import (
     CumulativeCheckpointCallback,
     FirstSeenCallback,
+    LearningRateDecayCallback,
     TensorboardCallback,
     ThreadTuningCallback,
 )
@@ -76,6 +77,27 @@ def test_non_cpu_device_is_left_alone():
 
 def test_on_step_continues_training():
     assert make_callback()._on_step() is True
+
+
+def test_learning_rate_decay_applies_once_at_the_step():
+    model = SimpleNamespace(
+        learning_rate=1e-4,
+        _setup_lr_schedule=lambda: None,
+        policy=SimpleNamespace(
+            optimizer=SimpleNamespace(param_groups=[{"lr": 1e-4}])
+        ),
+    )
+    callback = LearningRateDecayCallback(decay_step=100, decay_to=5e-5, verbose=0)
+    callback.model = model
+
+    callback.num_timesteps = 99
+    assert callback._on_step() is True
+    assert model.learning_rate == 1e-4
+
+    callback.num_timesteps = 100
+    assert callback._on_step() is True
+    assert model.learning_rate == 5e-5
+    assert model.policy.optimizer.param_groups[0]["lr"] == 5e-5
 
 
 # =============================================================================

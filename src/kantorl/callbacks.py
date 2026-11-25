@@ -1106,3 +1106,33 @@ class ThreadTuningCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         return True
+
+
+class LearningRateDecayCallback(BaseCallback):
+    """Apply one fixed learning-rate drop at a given training step.
+
+    This is for clean from-scratch runs whose method is fixed before training:
+    the final lineage used 1e-4 until 78M, then 5e-5. It is deliberately not a
+    per-wave tuning knob.
+    """
+
+    def __init__(self, decay_step: int, decay_to: float, verbose: int = 1):
+        super().__init__(verbose)
+        self.decay_step = int(decay_step)
+        self.decay_to = float(decay_to)
+        self._applied = False
+
+    def _on_step(self) -> bool:
+        if self._applied or self.num_timesteps < self.decay_step:
+            return True
+        self.model.learning_rate = self.decay_to
+        self.model._setup_lr_schedule()
+        for group in self.model.policy.optimizer.param_groups:
+            group["lr"] = self.decay_to
+        self._applied = True
+        if self.verbose:
+            print(
+                f"Learning rate decayed to {self.decay_to:g} "
+                f"at {self.num_timesteps:,} steps"
+            )
+        return True

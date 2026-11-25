@@ -50,8 +50,9 @@ __all__ = [
 # the opt-in 15x15 local visited-tile window; t2_levelmax_h60_lr2e5_rew keeps
 # the legacy observation and changes only the reward balance and rate;
 # t2_levelmax_h60_lr2e5_g999 changes only gamma and the rate;
-# t2_levelmax_h60_marker_lr2e5 adds the minimal player-position marker; and
-# t2_levelmax_h60_tiles_lr2e5 adds the larger local raw tile-ID window.
+# t2_levelmax_h60_marker_lr2e5 adds the minimal player-position marker;
+# t2_levelmax_h60_tiles_lr2e5 adds the larger local raw tile-ID window; and
+# t2_levelmax_h60_lr1e4to5e5 is the clean from-scratch final ruleset.
 BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t0_pure",
     "t1_minimal",
@@ -70,6 +71,7 @@ BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t2_levelmax_h60_lr2e5_g999",
     "t2_levelmax_h60_marker_lr2e5",
     "t2_levelmax_h60_tiles_lr2e5",
+    "t2_levelmax_h60_lr1e4to5e5",
 )
 
 # Keys allowed in the ``train`` section. These are loop-level arguments, not

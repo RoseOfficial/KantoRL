@@ -1,0 +1,59 @@
+# Clean from-scratch confirmation of the final ruleset.
+#
+# No warm-start, no per-wave tuning, no local map, no marker. The final
+# lineage's fixed method is used from step 0:
+#   - legacy seven-component observation
+#   - level_weight 4.0, explore_weight 0.3, 61,440 horizon, gamma 0.995
+#   - LR 1e-4 until 78M, then 5e-5 (the late-stability rescue, fixed in
+#     advance as part of the method, not chosen per wave)
+#   - 32 envs, target_kl 0.02, seed 43, 100M steps
+#
+# Checkpoint selection is pre-registered in docs/EXPERIMENTS.md: evaluate the
+# 10M checkpoints on validation seeds 0-2, rank by Boulder / Mt. Moon 3 t2 /
+# B2F reach, then evaluate the selected checkpoint on held-out seeds 10-19.
+name: t2_levelmax_h60_lr1e4to5e5
+
+description: >
+  Clean from-scratch final ruleset. Legacy observation, reward and horizon;
+  LR 1e-4 until 78M then 5e-5; 100M steps. Pre-registered selection and
+  held-out seeds 10-19.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+  lr_decay_step: 78000000
+  lr_decay_to: 0.00005
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 100000000
+  reward_fn: default
+  seed: 43

@@ -217,6 +217,27 @@ def test_tiles_tier_adds_only_the_local_tiles_and_rate() -> None:
             assert tiles[key] == value
 
 
+def test_clean_tier_is_the_final_ruleset() -> None:
+    config = load_tier("t2_levelmax_h60_lr1e4to5e5").to_config("pokemon_red.gb")
+
+    assert config.obs_components == (
+        "screens",
+        "health",
+        "level",
+        "badges",
+        "events",
+        "map",
+        "recent_actions",
+    )
+    assert config.level_weight == 4.0
+    assert config.explore_weight == 0.3
+    assert config.gamma == 0.995
+    assert config.max_steps == 61440
+    assert config.learning_rate == 1e-4
+    assert config.lr_decay_step == 78_000_000
+    assert config.lr_decay_to == 5e-5
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])

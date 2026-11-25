@@ -1213,3 +1213,17 @@ not ruled out by a from-scratch run, but the warm-start result is negative.
 The next fair test is a clean from-scratch run with the final ruleset (legacy
 observation, or legacy + local_tiles) on held-out seeds 10-19. The 99M policy
 remains the deepest; gamma 0.999 is the speed/reliability alternative.
+
+## Clean from-scratch run: final ruleset (development)
+
+Started 2026-11-25, seed 43, 100M steps from scratch with no checkpoint:
+legacy seven-component observation; level_weight 4.0, explore_weight 0.3;
+61,440 horizon; gamma 0.995; LR 1e-4 until 78M then 5e-5; 32 envs. The
+schedule is fixed before training; it is not a per-wave tuning knob.
+
+Pre-registered selection: evaluate the 10M checkpoints on validation seeds
+0-2 at 61,440; rank by Boulder reach, then Mt. Moon 3 Trainer 2 reach, then
+Mt. Moon B2F reach, then lower Boulder median; evaluate the selected
+checkpoint on held-out seeds 10-19. `scripts/clean_select.py` implements the
+rule. The held-out report is the clean headline; the validation only picks
+the checkpoint. Result pending.
