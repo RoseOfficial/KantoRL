@@ -42,11 +42,11 @@ evaluation loads the `.zip` alone.
 - 167 tests covering memory reads, rewards, observation encoders, tiers,
   checkpoint loading and milestone selection.
 - The chronological experiment log, including the harness bugs:
-  [docs/EXPERIMENTS.md](EXPERIMENTS.md).
+  [docs/EXPERIMENTS.md](https://github.com/RoseOfficial/KantoRL/blob/main/docs/EXPERIMENTS.md).
 - The narrative summary and threats to validity:
-  [docs/RESULTS.md](RESULTS.md).
+  [docs/RESULTS.md](https://github.com/RoseOfficial/KantoRL/blob/main/docs/RESULTS.md).
 - Checkpoint configuration and provenance:
-  [docs/MODELS.md](MODELS.md).
+  [docs/MODELS.md](https://github.com/RoseOfficial/KantoRL/blob/main/docs/MODELS.md).
 
 ## Verify a checkpoint
 
@@ -79,5 +79,7 @@ distributed.
 
 ## License
 
-All rights reserved. See [LICENSE](../LICENSE). Pokémon Red and its assets
-belong to Nintendo, Game Freak and Creatures. No ROM is included.
+All rights reserved. See
+[LICENSE](https://github.com/RoseOfficial/KantoRL/blob/main/LICENSE).
+Pokémon Red and its assets belong to Nintendo, Game Freak and Creatures. No
+ROM is included.
