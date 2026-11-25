@@ -65,6 +65,10 @@ limit for Mt. Moon's indoor maze. The 99M policy is the deepest; the
 gamma-0.999 final is the speed/reliability alternative. The next phase is a
 clean fixed-ruleset run or a deliberate tile-level map prior.
 
+A local tile-ID probe (104M) also regressed under warm-start (6/10 Boulder,
+Mt. Moon 3 t2 3/10, B2F 6/10); the 99M remains deepest. The warm-start
+fine-tunes are unstable, so a from-scratch clean run is the fair test.
+
 
 ## Setup
 

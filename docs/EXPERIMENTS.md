@@ -1192,3 +1192,24 @@ observation shape grows by one 15x15 branch; the 99M policy is warm-started
 through `scripts/transfer_local_map.py --new-component local_tiles` with
 parity 0.0 on an empty window. Reward, gamma and horizon match the 99M
 baseline; the rate is 2e-5. Result pending.
+
+## 104M local tile map: negative under warm-start
+
+The 5M tile probe (99M -> 104M, `local_tiles`, 2e-5) finished without a new
+curated first-seen event and without a `best_model`. Ten-seed evaluation:
+
+| checkpoint | Boulder | Route 3 | Mt. Moon 3 t2 | Mt. Moon B2F |
+|---|---:|---:|---:|---:|
+| 99M baseline | **10/10** (7,182) | 10/10 | **9/10** | **10/10** |
+| 104M gamma | 10/10 (5,160) | 10/10 | **10/10** | 10/10 |
+| 104M tiles | 6/10 (7,966) | 6/10 | 3/10 | 6/10 |
+
+The warm-start parity on an empty window was 0.0, so the new branch starts
+neutral; the 2e-5 continuation then drifts. This is the same pattern as the
+local visited map, reward rebalance and player marker: the 99M policy is a
+sharp local optimum, and 5M warm-start fine-tunes regress it. The tile map is
+not ruled out by a from-scratch run, but the warm-start result is negative.
+
+The next fair test is a clean from-scratch run with the final ruleset (legacy
+observation, or legacy + local_tiles) on held-out seeds 10-19. The 99M policy
+remains the deepest; gamma 0.999 is the speed/reliability alternative.
