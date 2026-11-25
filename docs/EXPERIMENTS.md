@@ -1156,3 +1156,28 @@ The next step is either a deliberate larger observation prior (a local
 tile-ID or walkability map, with no sprites/warps/ledges) or stopping the
 prior ladder and running the clean fixed-ruleset measurement on the 99M or
 gamma policy.
+
+## Minimal-prior ceiling at 99M
+
+The minimal-prior ladder stops here. The 99M policy remains the deepest:
+Boulder 10/10 (median 7,182), Route 3 10/10, Mt. Moon 3 Trainer 2 9/10,
+Mt. Moon B2F 10/10. Trainer 3, the Exit Super Nerd, and Cerulean remain
+0/10.
+
+The gamma-0.999 104M final is a speed/reliability alternative: Boulder 10/10
+at 5,160, Route 3 10/10, Mt. Moon 3 Trainer 2 10/10, B2F 10/10, but it loses
+Mt. Moon 1 depth (t1/t5/t6 8/10, 7/10, 0/10). The local visited map, the
+reward rebalance, and the player marker all failed; gamma 0.999 is the only
+positive change.
+
+The binding limit is the coarse 48x48 global map: each cell is ~9x9 tiles,
+and the fossil room is smaller than one cell. Minimal local maps and a player
+marker do not fix the indoor maze. The next phase is either:
+
+1. a clean fixed-ruleset run from scratch (held-out seeds 10-19) to confirm
+   the development lineage, or
+2. a deliberate tile-level map prior (tile IDs or walkability, no
+   sprites/warps/ledges) as a new observation experiment.
+
+Another small prior is not warranted. Artifacts: `runs/best/red_99M_s43.zip`
+(deepest) and `runs/best/red_gamma_104M_s43.zip` (speed/reliability).

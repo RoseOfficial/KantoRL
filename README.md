@@ -60,6 +60,11 @@ Trainer 3; the 99M remains the deepest policy.
 A player-marker probe (104M) kept 10/10 Boulder but collapsed Mt. Moon depth
 (t2 5/10, B2F 2/10); the 99M remains the deepest.
 
+The minimal-prior phase stops at 99M: the coarse 48x48 map is the binding
+limit for Mt. Moon's indoor maze. The 99M policy is the deepest; the
+gamma-0.999 final is the speed/reliability alternative. The next phase is a
+clean fixed-ruleset run or a deliberate tile-level map prior.
+
 
 ## Setup
 
