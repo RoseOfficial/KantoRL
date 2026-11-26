@@ -372,6 +372,40 @@ class KantoConfig:
     # Requires: pip install -e ".[curriculum]" for sb3-contrib (RecurrentPPO)
     enable_curriculum: bool = False
 
+    # Use RecurrentPPO (LSTM) without enabling the archive wrapper. Curriculum
+    # already implies recurrence; this switch exists for a recurrence ablation
+    # with a fresh-start-only environment.
+    recurrent: bool = False
+
+    # RecurrentPPO rollout geometry. LSTM backpropagation degrades over long
+    # rollouts, so the default keeps the sequence short.
+    recurrent_n_steps: int = 32
+    recurrent_batch_size: int = 128
+
+    # Scripted HM teaching/use inside the archive wrapper. Off by default:
+    # it is hand-authored direction, not a learned interface.
+    enable_hm_automation: bool = False
+
+    # Archive save triggers. A state is saved when the map changes and every
+    # N newly visited tiles. Set archive_cell_stride=0 to disable cell saves.
+    archive_on_new_map: bool = True
+    archive_cell_stride: int = 25
+
+    # Minimum environment steps between archive saves. Windows file scanning
+    # makes frequent 178 KB snapshot writes expensive; 0 disables the limit.
+    archive_save_cooldown: int = 0
+
+    # Keep one archive per worker. A shared directory makes 32 workers contend
+    # on the same files; per-env pools remove that bottleneck at the cost of
+    # not sharing discoveries between workers.
+    archive_per_env: bool = True
+
+    # Archive sampling mix. Frontier states are the highest-progress half of
+    # the pool; recent states are the latest third by training step; the
+    # remainder is uniform. The three must sum to at most 1.
+    archive_frontier_fraction: float = 0.5
+    archive_recent_fraction: float = 0.3
+
     # Probability of resetting from a checkpoint vs fresh start (0.0-1.0)
     # 0.75 means 75% of resets load a saved checkpoint, 25% start from initial state
     # Higher values emphasize practicing from advanced states
@@ -590,6 +624,43 @@ class KantoConfig:
             raise ValueError(
                 f"milestone_event_delta must be >= 1, got {self.milestone_event_delta}. "
                 "Must require at least 1 new event for a milestone."
+            )
+
+        # Recurrent and archive settings.
+        if self.recurrent_n_steps < 1:
+            raise ValueError(
+                f"recurrent_n_steps must be >= 1, got {self.recurrent_n_steps}."
+            )
+        if self.recurrent_batch_size < 1:
+            raise ValueError(
+                "recurrent_batch_size must be >= 1, got "
+                f"{self.recurrent_batch_size}."
+            )
+        if self.archive_cell_stride < 0:
+            raise ValueError(
+                f"archive_cell_stride must be >= 0, got {self.archive_cell_stride}."
+            )
+        if self.archive_save_cooldown < 0:
+            raise ValueError(
+                "archive_save_cooldown must be >= 0, got "
+                f"{self.archive_save_cooldown}."
+            )
+        if not (0.0 <= self.archive_frontier_fraction <= 1.0):
+            raise ValueError(
+                "archive_frontier_fraction must be in [0, 1], got "
+                f"{self.archive_frontier_fraction}."
+            )
+        if not (0.0 <= self.archive_recent_fraction <= 1.0):
+            raise ValueError(
+                "archive_recent_fraction must be in [0, 1], got "
+                f"{self.archive_recent_fraction}."
+            )
+        if self.archive_frontier_fraction + self.archive_recent_fraction > 1.0:
+            raise ValueError(
+                "archive_frontier_fraction + archive_recent_fraction must be "
+                "<= 1.0, got "
+                f"{self.archive_frontier_fraction} + "
+                f"{self.archive_recent_fraction}."
             )
 
         # Validate agent module settings

@@ -102,6 +102,10 @@ lowering the level weight helped at 10M then regressed by 20M. The
 pre-registered decision is the method change, not another reward sweep.
 Details: [docs/PHASE0_RESULTS.md](docs/PHASE0_RESULTS.md).
 
+Phase 1 is the method run: RecurrentPPO, a learned local tile map, and a
+self-generated archive, staged at 50M with a 20M gate. Design and gates:
+[docs/PREREGISTRATION_PHASE1.md](docs/PREREGISTRATION_PHASE1.md).
+
 
 ## Setup
 

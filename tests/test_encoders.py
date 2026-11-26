@@ -46,6 +46,8 @@ def batch(space: spaces.Dict, n: int = 4, seed: int = 0) -> dict[str, torch.Tens
             )
         elif len(sub.shape) == 3:
             out[key] = torch.as_tensor(rng.integers(0, 256, (n, *sub.shape), dtype=np.uint8))
+        elif len(sub.shape) == 2 and sub.dtype == np.uint8:
+            out[key] = torch.as_tensor(rng.integers(0, 256, (n, *sub.shape), dtype=np.uint8))
         else:
             out[key] = torch.as_tensor(rng.random((n, *sub.shape), dtype=np.float32))
     return out
@@ -55,10 +57,30 @@ def test_every_component_gets_its_own_encoder():
     space = t2_space()
     extractor = ModularExtractor(space)
 
-    encoded = set(extractor.vector_encoders) | set(extractor.image_encoders)
+    encoded = (
+        set(extractor.vector_encoders)
+        | set(extractor.image_encoders)
+        | set(extractor.tile_encoders)
+    )
 
     assert encoded == set(space.spaces)
     assert "screens" in extractor.image_encoders
+
+
+def test_tile_maps_get_an_embedding_encoder():
+    """Raw tile IDs are categorical; they must not be flattened as scalars."""
+    space = spaces.Dict(
+        {
+            "screens": spaces.Box(0, 255, (3, 72, 80), np.uint8),
+            "local_tiles": spaces.Box(0, 255, (15, 15), np.uint8),
+        }
+    )
+    extractor = ModularExtractor(space)
+
+    assert "local_tiles" in extractor.tile_encoders
+    out = extractor(batch(space))
+    assert out.shape == (4, 512)
+    assert torch.isfinite(out).all()
 
 
 def test_output_width_is_fixed_regardless_of_component_count():

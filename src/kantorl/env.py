@@ -1088,9 +1088,13 @@ def make_env(
         if enable_curriculum and cfg.enable_curriculum:
             from kantorl.curriculum import CurriculumWrapper
 
+            pool_dir = cfg.session_path / "checkpoint_pool"
+            if cfg.archive_per_env:
+                pool_dir = pool_dir / f"env_{rank}"
+
             env = CurriculumWrapper(
                 env,
-                pool_dir=cfg.session_path / "checkpoint_pool",
+                pool_dir=pool_dir,
                 config=cfg,
                 initial_step_offset=initial_step_offset,
             )

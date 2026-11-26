@@ -233,6 +233,8 @@ def create_lstm_policy_kwargs() -> dict:
             "vf": [256],  # Value: Shared LSTM → 256 → Value
         },
         "activation_fn": torch.nn.ReLU,
+        "features_extractor_class": ModularExtractor,
+        "features_extractor_kwargs": {"features_dim": 512, "proj_dim": 64},
     }
 
 
@@ -251,6 +253,7 @@ def resolve_config(
     stream_color: str,
     stream_sprite_id: int,
     use_curriculum: bool,
+    use_recurrent: bool = False,
     enable_wandb: bool,
     wandb_project: str,
     wandb_entity: str | None,
@@ -289,6 +292,7 @@ def resolve_config(
             stream_color=stream_color,
             stream_sprite_id=stream_sprite_id,
             enable_curriculum=use_curriculum,
+            recurrent=use_recurrent,
             enable_agent=use_agent,
             enable_wandb=enable_wandb,
             wandb_project=wandb_project,
@@ -313,6 +317,7 @@ def resolve_config(
     # Features can only be added by the CLI, never removed.
     config.enable_streaming = config.enable_streaming or enable_streaming
     config.enable_curriculum = config.enable_curriculum or use_curriculum
+    config.recurrent = config.recurrent or use_recurrent
     config.enable_agent = config.enable_agent or use_agent
     config.enable_wandb = config.enable_wandb or enable_wandb
 
@@ -343,6 +348,7 @@ def train(
     stream_color: str = "#ff0000",
     stream_sprite_id: int = 0,
     use_curriculum: bool = False,
+    use_recurrent: bool = False,
     enable_wandb: bool = False,
     wandb_project: str = "kantorl",
     wandb_entity: str | None = None,
@@ -459,6 +465,7 @@ def train(
         stream_color=stream_color,
         stream_sprite_id=stream_sprite_id,
         use_curriculum=use_curriculum,
+        use_recurrent=use_recurrent,
         enable_wandb=enable_wandb,
         wandb_project=wandb_project,
         wandb_entity=wandb_entity,
@@ -473,6 +480,7 @@ def train(
     # reads those decisions back instead of the scalar defaults.
     n_envs = config.n_envs
     use_curriculum = config.enable_curriculum
+    use_recurrent = config.recurrent or config.enable_curriculum
     use_agent = config.enable_agent
     enable_streaming = config.enable_streaming
     enable_wandb = config.enable_wandb
@@ -574,18 +582,19 @@ def train(
     # Model Creation or Loading
     # -------------------------------------------------------------------------
 
-    # Detect whether to use RecurrentPPO (LSTM) or standard PPO
-    # Curriculum mode uses RecurrentPPO for temporal memory across steps
-    # A flag file tracks which model type was used so we load correctly
+    # Detect whether to use RecurrentPPO (LSTM) or standard PPO. Recurrence is
+    # independent of the archive wrapper: --recurrent is a method ablation,
+    # while the archive implies recurrence. A flag file records the choice so
+    # resume loads the right class even when the CLI is silent.
     curriculum_flag = session_path / "curriculum_enabled.flag"
+    recurrent_flag = session_path / "recurrent_enabled.flag"
 
     if checkpoint_path and resume:
         # Resume from existing checkpoint
         print(f"Resuming from checkpoint: {checkpoint_path} (step {start_steps:,})")
 
-        # Detect model type from flag file
-        # If the flag file exists, the checkpoint was saved by RecurrentPPO
-        is_recurrent = curriculum_flag.exists()
+        # Detect model type from either flag file.
+        is_recurrent = recurrent_flag.exists() or curriculum_flag.exists()
 
         if is_recurrent:
             from sb3_contrib import RecurrentPPO
@@ -620,19 +629,17 @@ def train(
         # Start fresh training with new model
         print("Starting fresh training...")
 
-        if use_curriculum:
-            # Use RecurrentPPO with LSTM for curriculum learning
-            # LSTM provides temporal memory across longer episodes
+        if use_recurrent:
+            # Use RecurrentPPO with LSTM for temporal memory. This is selected
+            # by --recurrent or by the archive wrapper, which implies it.
             from sb3_contrib import RecurrentPPO
 
             # RecurrentPPO needs shorter rollouts for effective LSTM BPTT.
             # 128 steps causes gradient vanishing through the LSTM
             # (0.9^128 ≈ 1e-6); 32 is within effective LSTM memory range
-            # (0.9^32 ≈ 0.035). Rollouts happen 4× more often to compensate.
-            # Math: 8 envs × 32 steps = 256 samples/rollout,
-            # 256/128 = 2 minibatches, 2 × 3 epochs = 6 gradient steps.
-            recurrent_n_steps = 32
-            recurrent_batch_size = 128
+            # (0.9^32 ≈ 0.035). Rollouts happen more often to compensate.
+            recurrent_n_steps = config.recurrent_n_steps
+            recurrent_batch_size = config.recurrent_batch_size
 
             model = RecurrentPPO(
                 # MultiInputLstmPolicy: Dict obs + LSTM layers
@@ -654,7 +661,7 @@ def train(
                 vf_coef=config.vf_coef,
                 # Optimizer
                 learning_rate=config.learning_rate,
-                # LSTM network architecture (shared LSTM)
+                # Modular CNN/MLP extractor plus shared LSTM
                 policy_kwargs=create_lstm_policy_kwargs(),
                 verbose=1,
                 seed=seed,
@@ -663,8 +670,10 @@ def train(
                 tensorboard_log=str(session_path / "tensorboard"),
             )
 
-            # Write flag file so we know to use RecurrentPPO.load() on resume
-            curriculum_flag.write_text("curriculum")
+            # Record the model class for resume detection.
+            recurrent_flag.write_text("recurrent")
+            if use_curriculum:
+                curriculum_flag.write_text("curriculum")
         else:
             # Standard PPO without LSTM
             model = PPO(
@@ -899,7 +908,12 @@ def main() -> None:
     parser.add_argument(
         "--curriculum",
         action="store_true",
-        help="Enable curriculum learning with auto-checkpointing, HM automation, and LSTM",
+        help="Enable the self-generated checkpoint archive and RecurrentPPO",
+    )
+    parser.add_argument(
+        "--recurrent",
+        action="store_true",
+        help="Use RecurrentPPO (LSTM) without the archive wrapper",
     )
     parser.add_argument(
         "--agent",
@@ -975,6 +989,7 @@ def main() -> None:
         stream_color=args.stream_color,
         stream_sprite_id=args.stream_sprite,
         use_curriculum=args.curriculum,
+        use_recurrent=args.recurrent,
         use_agent=args.agent,
         enable_wandb=args.wandb,
         wandb_project=args.wandb_project,

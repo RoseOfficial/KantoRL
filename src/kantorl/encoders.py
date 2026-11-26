@@ -34,6 +34,41 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, NatureC
 from torch import nn
 
 
+class TileMapEncoder(nn.Module):
+    """Encode a small 2-D tile map with a learned per-tile embedding.
+
+    Raw tile IDs are categorical, not ordinal: tile 0x3D is not "close to"
+    tile 0x3E in any useful sense. A ``nn.Embedding`` lets the model learn
+    which tiles behave alike (wall, floor, water, door), then a small CNN
+    learns the local geometry. This avoids hand-authoring per-tileset
+    walkability tables while still giving the policy a spatial view.
+    """
+
+    def __init__(
+        self,
+        shape: tuple[int, int],
+        out_dim: int = 64,
+        embed_dim: int = 16,
+    ) -> None:
+        super().__init__()
+        self.embed = nn.Embedding(256, embed_dim)
+        self.net = nn.Sequential(
+            nn.Conv2d(embed_dim, 32, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(64 * shape[0] * shape[1], out_dim),
+            nn.ReLU(),
+        )
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        indices = value.long().clamp(0, 255)
+        embedded = self.embed(indices)  # (B, H, W, E)
+        embedded = embedded.permute(0, 3, 1, 2).contiguous()
+        return self.net(embedded)
+
+
 class ModularExtractor(BaseFeaturesExtractor):
     """Encode each observation key separately, then fuse.
 
@@ -61,6 +96,7 @@ class ModularExtractor(BaseFeaturesExtractor):
         self._space = observation_space
 
         self.image_encoders = nn.ModuleDict()
+        self.tile_encoders = nn.ModuleDict()
         self.vector_encoders = nn.ModuleDict()
         self.vector_kinds: dict[str, str] = {}
 
@@ -69,6 +105,19 @@ class ModularExtractor(BaseFeaturesExtractor):
             if isinstance(space, spaces.Box) and len(space.shape) == 3:
                 self.image_encoders[key] = NatureCNN(space, features_dim=cnn_features)
                 fused += cnn_features
+                continue
+
+            # Small 2-D tile maps (local_tiles / local_map) get an embedding
+            # and a CNN. The global 48x48 map stays on the vector path so
+            # existing checkpoints keep their architecture.
+            if (
+                isinstance(space, spaces.Box)
+                and len(space.shape) == 2
+                and space.dtype == np.uint8
+                and max(space.shape) <= 21
+            ):
+                self.tile_encoders[key] = TileMapEncoder(space.shape, proj_dim)
+                fused += proj_dim
                 continue
 
             if isinstance(space, spaces.MultiDiscrete):
@@ -105,6 +154,9 @@ class ModularExtractor(BaseFeaturesExtractor):
                 # extractor runs; direct callers may hand over raw uint8.
                 value = value.float() / 255.0
             parts.append(encoder(value))
+
+        for key, encoder in self.tile_encoders.items():
+            parts.append(encoder(observations[key]))
 
         for key, encoder in self.vector_encoders.items():
             value = observations[key].float()

@@ -252,6 +252,18 @@ def test_phase0_arms_change_one_axis_each() -> None:
         assert arm[key] == value
 
 
+def test_phase1_tier_is_recurrent_archive_without_hm_automation() -> None:
+    config = load_tier("phase1_recurrent_tiles").to_config("pokemon_red.gb")
+
+    assert config.recurrent is True
+    assert config.enable_curriculum is True
+    assert config.enable_hm_automation is False
+    assert config.dynamic_episode_length is False
+    assert "local_tiles" in config.obs_components
+    assert config.explore_weight == 3.0
+    assert config.gamma == 0.995
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])

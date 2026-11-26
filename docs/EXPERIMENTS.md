@@ -1351,3 +1351,23 @@ the semantic local map, intrinsic exploration, and the self-generated archive.
 Full write-up: `docs/PHASE0_RESULTS.md`.
 
 
+
+## Phase 1: method run (development)
+
+Phase 1 starts from the Phase 0 conclusion that no single knob reaches
+Boulder. The pre-registration is `docs/PREREGISTRATION_PHASE1.md`; the tier is
+`phase1_recurrent_tiles`. It combines RecurrentPPO, a learned 15x15 local tile
+map (per-tile embedding + small CNN), and a per-worker self-generated archive,
+carrying `explore_weight=3.0` and `gamma=0.995` from Phase 0. HM automation is
+off; evaluation is always a cold start.
+
+The budget is staged because the recurrent model runs at 250-280 steps/s on
+the reference CPU: 20M gate (Boulder 2/3), 30M gate (Boulder 2/3 and Pewter
+3/3), then 50M. A failed 20M gate costs about 22 hours, not the ~4.5 days a
+100M run would take.
+
+The archive pools are per worker. A first implementation shared one directory
+across 32 workers; concurrent pruning of open state files raised
+`PermissionError` inside a worker and stalled `env.close()`. The pool now has
+filename-encoded save serials, best-effort deletion, a hysteresis window and a
+per-worker directory split.

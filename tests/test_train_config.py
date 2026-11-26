@@ -147,6 +147,30 @@ def test_cli_can_add_a_feature_the_tier_left_off() -> None:
     assert config.enable_agent is True
 
 
+def test_cli_recurrent_adds_recurrence_without_the_archive() -> None:
+    config = resolve(use_recurrent=True)
+
+    assert config.recurrent is True
+    assert config.enable_curriculum is False
+
+
+def test_tier_recurrence_and_archive_survive_a_silent_cli() -> None:
+    config = resolve(base_config=load_tier("phase1_recurrent_tiles").to_config("pokemon_red.gb"))
+
+    assert config.recurrent is True
+    assert config.enable_curriculum is True
+    assert config.enable_hm_automation is False
+
+
+def test_archive_fractions_must_not_overlap() -> None:
+    with pytest.raises(ValueError, match="archive_frontier_fraction"):
+        KantoConfig(
+            rom_path="pokemon_red.gb",
+            archive_frontier_fraction=0.8,
+            archive_recent_fraction=0.4,
+        )
+
+
 def test_expanded_tier_config_is_validated() -> None:
     """A resolved tier config must still be constructible and self-consistent."""
     config = resolve(base_config=load_tier("t2_pragmatic").to_config("pokemon_red.gb"))

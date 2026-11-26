@@ -1,0 +1,73 @@
+# Phase 1: the method change selected by the Phase 0 screen.
+#
+# Phase 0 found that no single knob reaches Boulder from scratch at 20M.
+# This tier adds the method change instead:
+#   - RecurrentPPO (LSTM) for memory across rooms, menus and multi-step quests
+#   - a 15x15 raw tile-ID window, encoded with a learned per-tile embedding
+#     and a small CNN (the "learned local map"; no hand-authored collision)
+#   - a self-generated archive that saves states on new maps and every 25 new
+#     tiles, then resets from frontier/recent/uniform samples
+#   - explore_weight 3.0, the only Phase 0 setting that reached Pewter
+#
+# HM automation is off: it is scripted direction. Evaluation is always a cold
+# bulba_start with no archive. The archive is a training scaffold only.
+name: phase1_recurrent_tiles
+
+description: >
+  Phase 1 method run: RecurrentPPO, learned local tile map, and a
+  self-generated frontier archive. Carries explore_weight 3.0 and gamma 0.995
+  from Phase 0; 100M steps from scratch.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - local_tiles
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 3.0
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  recurrent: true
+  recurrent_n_steps: 32
+  recurrent_batch_size: 128
+
+  enable_curriculum: true
+  enable_hm_automation: false
+  checkpoint_weight: 0.75
+  max_pool_size: 50
+  archive_on_new_map: true
+  archive_cell_stride: 0
+  archive_save_cooldown: 1000
+  archive_per_env: true
+  archive_frontier_fraction: 0.5
+  archive_recent_fraction: 0.3
+  dynamic_episode_length: false
+
+  enable_agent: false
+
+train:
+  total_timesteps: 100000000
+  reward_fn: default
+  seed: 43

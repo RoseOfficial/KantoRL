@@ -38,6 +38,7 @@ Dependencies:
 import json
 import os
 import random
+import time
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -69,15 +70,16 @@ class CheckpointPool:
 
     File Layout:
         pool_dir/
-        ├── cp_001142_a3f8b2c1.state     # PyBoy save state binary
-        ├── cp_001142_a3f8b2c1.json      # Metadata (badges, events, map_id)
-        ├── cp_002305_7e4d1f9a.state
-        ├── cp_002305_7e4d1f9a.json
+        ├── cp_001142_000000001234567890_a3f8b2c1.state  # PyBoy save state
+        ├── cp_001142_000000001234567890_a3f8b2c1.json   # Metadata
+        ├── cp_002305_000000001987654321_7e4d1f9a.state
+        ├── cp_002305_000000001987654321_7e4d1f9a.json
         └── ...
 
     Naming Convention:
-        cp_{progress_score:06d}_{uuid4_hex[:8]}.state
-        - Progress score zero-padded to 6 digits for natural sorting
+        cp_{progress_score:06d}_{save_serial:020d}_{uuid4_hex[:8]}.state
+        - Progress score zero-padded for natural sorting
+        - Save serial in the name so pruning does not read every sidecar
         - UUID suffix prevents collisions from multiple parallel environments
 
     Attributes:
@@ -113,6 +115,7 @@ class CheckpointPool:
         badges: int,
         event_count: int,
         map_id: int,
+        step: int = 0,
     ) -> None:
         """
         Save a game state to the pool with metadata.
@@ -126,15 +129,19 @@ class CheckpointPool:
             badges: Number of badges at time of save (0-8).
             event_count: Number of event flags set.
             map_id: Current map ID when state was saved.
+            step: Monotonic save serial, used by recent-state sampling.
 
         Notes:
             - Progress score = badges * 1000 + event_count
             - UUID suffix prevents filename collisions across parallel envs
-            - Prunes lowest-progress checkpoints if pool exceeds max_size
+            - Pruning keeps both the highest-progress half and the most recent
+              half, so a deep dungeon state is not discarded for an old badge
         """
         progress = badges * 1000 + event_count
         uid = uuid4().hex[:8]
-        base_name = f"cp_{progress:06d}_{uid}"
+        # The save serial is in the filename so pruning can sort by recency
+        # without opening every metadata sidecar. 20 digits fits time_ns().
+        base_name = f"cp_{progress:06d}_{int(step):020d}_{uid}"
 
         state_path = self.pool_dir / f"{base_name}.state"
         meta_path = self.pool_dir / f"{base_name}.json"
@@ -154,6 +161,7 @@ class CheckpointPool:
             "event_count": event_count,
             "map_id": map_id,
             "progress": progress,
+            "step": int(step),
         }
         with open(tmp_meta, "w") as f:
             json.dump(metadata, f)
@@ -162,47 +170,63 @@ class CheckpointPool:
         # Prune if over max size
         self._prune()
 
-    def sample(self) -> tuple[bytes, dict[str, Any]] | None:
+    def sample(
+        self,
+        frontier_fraction: float = 0.5,
+        recent_fraction: float = 0.3,
+    ) -> tuple[bytes, dict[str, Any]] | None:
         """
-        Sample a checkpoint from the pool, weighted toward higher progress.
+        Sample a checkpoint from the pool.
 
-        Uses linear weighting: the highest-progress checkpoint is sampled
-        most often, the lowest least often. This naturally creates a
-        curriculum where the agent practices more from advanced states.
+        The default mix is 50% frontier (highest-progress half), 30% recent
+        (latest third by save serial) and 20% uniform. Frontier sampling gives
+        the agent hard states to practise; recent sampling keeps the current
+        map in rotation even when it has not produced a new event yet; uniform
+        sampling prevents the pool from collapsing onto one state.
+
+        Args:
+            frontier_fraction: Probability of sampling the highest-progress half.
+            recent_fraction: Probability of sampling the latest third by step.
 
         Returns:
             Tuple of (state_bytes, metadata_dict) or None if pool is empty.
-            Metadata contains: badges, event_count, map_id, progress.
 
         Notes:
-            - Weights are proportional to rank (not progress score)
-            - This prevents one very high checkpoint from dominating
+            - Fractions must sum to at most 1.0 (validated in KantoConfig)
             - Returns None if the pool directory is empty
         """
         checkpoints = self._list_checkpoints()
         if not checkpoints:
             return None
 
-        # Weight by rank (1-indexed): highest progress gets highest weight
-        weights = list(range(1, len(checkpoints) + 1))
-        total = sum(weights)
-        probs = [w / total for w in weights]
+        roll = random.random()
+        if roll < frontier_fraction:
+            half = max(1, len(checkpoints) // 2)
+            candidates = checkpoints[-half:]
+        elif roll < frontier_fraction + recent_fraction:
+            candidates = self._list_recent(max(1, len(checkpoints) // 3))
+        else:
+            candidates = checkpoints
 
-        chosen = random.choices(checkpoints, weights=probs, k=1)[0]
+        # A state can be pruned by another worker between listing and reading.
+        # Retry with a fresh listing instead of failing the reset.
+        for _ in range(3):
+            if not candidates:
+                return None
+            chosen = random.choice(candidates)
+            try:
+                with open(chosen, "rb") as f:
+                    state_bytes = f.read()
+                metadata = json.loads(chosen.with_suffix(".json").read_text())
+            except (OSError, json.JSONDecodeError):
+                checkpoints = self._list_checkpoints()
+                if not checkpoints:
+                    return None
+                candidates = checkpoints
+                continue
+            return state_bytes, metadata
 
-        # Read state and metadata
-        state_path = chosen
-        meta_path = chosen.with_suffix(".json")
-
-        with open(state_path, "rb") as f:
-            state_bytes = f.read()
-
-        metadata: dict[str, Any] = {}
-        if meta_path.exists():
-            with open(meta_path) as f:
-                metadata = json.load(f)
-
-        return state_bytes, metadata
+        return None
 
     def best_progress(self) -> int:
         """
@@ -246,18 +270,67 @@ class CheckpointPool:
         except (IndexError, ValueError):
             return 0
 
-    def _prune(self) -> None:
-        """
-        Remove lowest-progress checkpoints when pool exceeds max_size.
+    def _list_recent(self, count: int) -> list[Path]:
+        """Return the ``count`` most recently saved checkpoints.
 
-        Removes the state file and its metadata sidecar together.
+        Recency is the monotonic save serial in the metadata sidecar, not the
+        progress score: a deep dungeon state with no new event flag is still
+        the frontier and must stay in rotation.
         """
         checkpoints = self._list_checkpoints()
-        while len(checkpoints) > self.max_size:
-            # Remove lowest-progress checkpoint (first in sorted list)
-            to_remove = checkpoints.pop(0)
-            to_remove.unlink(missing_ok=True)
-            to_remove.with_suffix(".json").unlink(missing_ok=True)
+        ordered = sorted(checkpoints, key=self._get_step)
+        return ordered[-count:] if count > 0 else []
+
+    def _get_step(self, path: Path) -> int:
+        """Read the save serial from the filename, falling back to metadata.
+
+        New files carry ``cp_<progress>_<step>_<uid>``; older files have no
+        step component and need the sidecar.
+        """
+        parts = path.stem.split("_")
+        if len(parts) >= 4:
+            try:
+                return int(parts[2])
+            except ValueError:
+                pass
+        meta_path = path.with_suffix(".json")
+        try:
+            with open(meta_path) as f:
+                return int(json.load(f).get("step", 0))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return 0
+
+    def _prune(self) -> None:
+        """
+        Keep the highest-progress half and the most recent half.
+
+        Pruning on progress alone discards the deep dungeon state that has not
+        triggered an event yet, which is exactly the state the archive exists
+        to preserve. The union is at most ``max_size`` entries.
+
+        Workers share this directory and may be reading a state when another
+        worker prunes it, so deletion is best-effort. A small hysteresis avoids
+        pruning on every add once the pool is full.
+        """
+        checkpoints = self._list_checkpoints()
+        if len(checkpoints) <= self.max_size + 8:
+            return
+
+        half = max(1, self.max_size // 2)
+        keep = set(checkpoints[-half:]) | set(self._list_recent(half))
+
+        for path in checkpoints:
+            if path not in keep:
+                self._remove(path)
+
+    def _remove(self, path: Path) -> None:
+        """Best-effort deletion of a state and its metadata sidecar."""
+        for target in (path, path.with_suffix(".json")):
+            try:
+                target.unlink(missing_ok=True)
+            except OSError:
+                # Another worker has the file open or already removed it.
+                continue
 
 
 # =============================================================================
@@ -271,9 +344,9 @@ class CurriculumWrapper(gym.Wrapper):
 
     This wrapper intercepts reset() and step() to provide:
     1. Checkpoint loading on reset (75% checkpoint, 25% fresh start)
-    2. Milestone checkpoint saving during play
+    2. Milestone and frontier checkpoint saving during play
     3. Dynamic episode length scaling with badge progress
-    4. HM automation (auto-teach and auto-use field moves)
+    4. Optional HM automation (off by default; it is hand-authored direction)
     5. Reward function syncing to prevent spurious rewards
 
     Wrapping Order:
@@ -302,7 +375,7 @@ class CurriculumWrapper(gym.Wrapper):
     Notes:
         - Must be applied after env.reset() has been called at least once
         - The pool directory is shared across all parallel environments
-        - HM automation is tightly coupled to curriculum (enabled together)
+        - HM automation is opt-in via ``enable_hm_automation``
     """
 
     def __init__(
@@ -332,13 +405,25 @@ class CurriculumWrapper(gym.Wrapper):
         self.checkpoint_weight = cfg.checkpoint_weight
         self.milestone_event_delta = cfg.milestone_event_delta
 
-        # HM automation instance (uses the unwrapped env's pyboy)
-        self.hm = HMAutomation(self._base_env.pyboy)
+        # HM automation is hand-authored direction, so it is opt-in. The
+        # archive itself (state pool + resets) is domain-agnostic.
+        self.hm = (
+            HMAutomation(self._base_env.pyboy)
+            if cfg.enable_hm_automation
+            else None
+        )
 
         # Milestone tracking (reset each episode)
         self._best_badges = 0
         self._best_events = 0
         self._step_count = 0
+
+        # Frontier tracking: save a state on a map change and every N new
+        # tiles. The set is per episode; resets from the pool start a new one.
+        self._visited_cells: set[tuple[int, int]] = set()
+        self._last_map_id: int | None = None
+        self._save_cooldown = 0
+        self._save_serial = 0
 
         # Stagger offset: pre-advances step counter on first episode only
         # so parallel envs truncate at different times
@@ -395,16 +480,23 @@ class CurriculumWrapper(gym.Wrapper):
         self._best_badges = 0
         self._best_events = 0
         self._total_resets += 1
+        self._visited_cells.clear()
+        self._last_map_id = None
+        self._save_cooldown = 0
 
-        # Reset HM automation
-        self.hm.reset()
+        # Reset HM automation when it is enabled
+        if self.hm is not None:
+            self.hm.reset()
 
         # Decide whether to load a checkpoint
         use_checkpoint = random.random() < self.checkpoint_weight
         loaded = False
 
         if use_checkpoint:
-            result = self.pool.sample()
+            result = self.pool.sample(
+                frontier_fraction=self.config.archive_frontier_fraction,
+                recent_fraction=self.config.archive_recent_fraction,
+            )
             if result is not None:
                 state_bytes, metadata = result
 
@@ -458,18 +550,24 @@ class CurriculumWrapper(gym.Wrapper):
             Tuple of (observation, reward, terminated, truncated, info)
             with curriculum metadata added to info.
         """
-        # Run HM automation before the step
-        hm_info = self.hm.step(self._step_count)
+        # Run HM automation before the step when it is enabled
+        hm_info: dict[str, Any] = {}
+        if self.hm is not None:
+            hm_info = self.hm.step(self._step_count)
 
         # Execute the base environment step
         obs, reward, terminated, truncated, info = self.env.step(action)
         self._step_count += 1
+        if self._save_cooldown > 0:
+            self._save_cooldown -= 1
 
         # -----------------------------------------------------------------
-        # Milestone Detection and Checkpoint Saving
+        # Milestone and Frontier Detection
         # -----------------------------------------------------------------
-        current_badges = info.get("badges", 0)
-        current_events = info.get("events", 0)
+        current_badges = int(info.get("badges", 0))
+        current_events = int(info.get("events", 0))
+        map_id = int(info.get("map_id", 0))
+        position = info.get("position")
 
         is_milestone = False
 
@@ -483,17 +581,29 @@ class CurriculumWrapper(gym.Wrapper):
             is_milestone = True
             self._best_events = current_events
 
-        # Save checkpoint at milestones
-        if is_milestone:
-            state_buffer = BytesIO()
-            self._base_env.pyboy.save_state(state_buffer)
-            map_id = info.get("map_id", 0)
-            self.pool.add(
-                state_bytes=state_buffer.getvalue(),
-                badges=current_badges,
-                event_count=current_events,
-                map_id=map_id,
-            )
+        # Frontier save: a new map, or every N new tiles on the current map.
+        # The cell set is map-local; two maps can share (x, y) coordinates.
+        archive_trigger = False
+        if position is not None:
+            x, y = position
+            cell = (int(x), int(y))
+            if self._last_map_id is None:
+                self._last_map_id = map_id
+            elif map_id != self._last_map_id:
+                self._last_map_id = map_id
+                self._visited_cells.clear()
+                archive_trigger = self.config.archive_on_new_map
+            self._visited_cells.add(cell)
+            stride = self.config.archive_cell_stride
+            if stride > 0 and len(self._visited_cells) % stride == 0:
+                archive_trigger = True
+
+        if archive_trigger and self._save_cooldown > 0:
+            archive_trigger = False
+
+        archive_saved = is_milestone or archive_trigger
+        if archive_saved:
+            self._save_checkpoint(current_badges, current_events, map_id)
 
         # -----------------------------------------------------------------
         # Dynamic Episode Length
@@ -519,8 +629,31 @@ class CurriculumWrapper(gym.Wrapper):
         )
         info["curriculum_hm_taught"] = hm_info.get("hm_taught", [])
         info["curriculum_hm_used"] = hm_info.get("hm_used", [])
-        info["curriculum_hm_all_taught"] = self.hm.get_taught_moves()
+        info["curriculum_hm_all_taught"] = (
+            self.hm.get_taught_moves() if self.hm is not None else []
+        )
+        info["curriculum_archive_saved"] = archive_saved
         info["curriculum_checkpoint_resets"] = self._checkpoint_resets
         info["curriculum_total_resets"] = self._total_resets
 
         return obs, reward, terminated, truncated, info
+
+    def _save_checkpoint(self, badges: int, events: int, map_id: int) -> None:
+        """Snapshot the current emulator state into the shared pool.
+
+        Archive writes are best-effort: a failed save must not kill the
+        training worker. The next frontier trigger will try again.
+        """
+        try:
+            state_buffer = BytesIO()
+            self._base_env.pyboy.save_state(state_buffer)
+            self.pool.add(
+                state_bytes=state_buffer.getvalue(),
+                badges=badges,
+                event_count=events,
+                map_id=map_id,
+                step=time.time_ns(),
+            )
+            self._save_cooldown = self.config.archive_save_cooldown
+        except OSError:
+            return
