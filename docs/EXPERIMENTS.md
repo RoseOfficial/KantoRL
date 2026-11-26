@@ -1301,3 +1301,23 @@ decision rules were frozen before the scored runs in
 The training callback now logs the reward mix (`game/reward_*_share`), battle
 fraction, action entropy and per-episode map coverage, so "grinding" and
 "policy collapse" are measured rather than inferred from the reward curve.
+
+### 2026-11-26 02:38: resource crash on explore3
+
+The baseline (231 min) and gamma (214 min) arms finished 20M. The third arm,
+`phase0_explore3`, failed at environment startup with WinError 1455 ("paging
+file is too small") and WinError 1450. The machine was at 54.5/55.4 GB commit
+charge; ComfyUI alone held 11.1 GB. The 32 workers hung instead of exiting, so
+the process tree was killed and `run_tiers.py` moved on to `phase0_level1`.
+
+Recovery: ComfyUI, Discord and Steam were closed, restoring about 10 GB of
+commit headroom. `level1` continued. A second pass
+(`runs/phase0_sweep2.log`) waits for the first orchestrator to exit, then
+reruns the crashed arm with the identical frozen config and fills any missing
+evaluation reports. Pre-registration rule 6 permits rerunning a crashed arm
+with the same settings; no arm setting changed.
+
+The crash is an environment failure, not a result for the explore arm. The
+arm has no checkpoints and is not part of any comparison until the rerun
+finishes.
+
