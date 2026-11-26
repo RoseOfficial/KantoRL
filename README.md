@@ -93,13 +93,14 @@ Both headline policies are published as release assets on the
 committed to git (~33 MB each). See [docs/MODELS.md](docs/MODELS.md) for
 provenance, configuration and the exact evaluation command.
 
-### Next phase: Phase 0
+### Phase 0 result
 
-The program has reopened with a pre-registered screen of *why* the clean
-from-scratch run failed, before any method change: four single-axis arms
-(control, gamma, exploration weight, level weight) at 20M steps each. The
-design, endpoints and decision rules are frozen in
-[docs/PREREGISTRATION_PHASE0.md](docs/PREREGISTRATION_PHASE0.md).
+The pre-registered screen is complete: **no single knob reached Boulder from
+scratch at 20M**. Stronger exploration was the only arm to reach Pewter
+(2/3), but it never beat Brock; gamma 0.999 was negative from scratch, and
+lowering the level weight helped at 10M then regressed by 20M. The
+pre-registered decision is the method change, not another reward sweep.
+Details: [docs/PHASE0_RESULTS.md](docs/PHASE0_RESULTS.md).
 
 
 ## Setup

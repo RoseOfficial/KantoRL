@@ -1321,3 +1321,33 @@ The crash is an environment failure, not a result for the explore arm. The
 arm has no checkpoints and is not part of any comparison until the rerun
 finishes.
 
+### Phase 0 result: no single knob reaches Boulder
+
+The rerun completed `explore3`, and all eight fixed evaluations ran. Primary
+endpoint (Boulder at 20M, three validation seeds):
+
+| arm | 10M Boulder | 20M Boulder | 20M Forest | 20M Pewter | training badge |
+|---|---:|---:|---:|---:|---:|
+| baseline | 0/3 | **0/3** | 3/3 | 0/3 | 5.33M |
+| gamma 0.999 | 0/3 | **0/3** | 0/3 | 0/3 | 13.62M |
+| explore 3.0 | 0/3 | **0/3** | 3/3 | **2/3** | none |
+| level 1.0 | 0/3 | **0/3** | 0/3 | 0/3 | 11.43M |
+
+Pre-registration rule 2 applies: no single knob is sufficient. Phase 1
+proceeds with the method change, with no fifth arm and no further reward
+tuning for the first badge.
+
+The secondary endpoints are still informative. `explore3` was the only arm to
+reach Pewter from a cold start (2/3, median 32,120) and removed the level
+grinding (level share 0.02, explore share 0.90), but it never earned a badge.
+`level1` had the best 10M checkpoint (Forest 3/3, median 1,421) and regressed
+by 20M, which points at retention rather than reward balance. Gamma 0.999,
+positive under warm start, was the weakest from scratch. Action entropy stayed
+1.89-1.96 in every arm, so none of these are policy collapses.
+
+Phase 1 carries `explore_weight=3.0` and `gamma=0.995`, selects checkpoints on
+validation instead of the final step, and adds the method change: recurrence,
+the semantic local map, intrinsic exploration, and the self-generated archive.
+Full write-up: `docs/PHASE0_RESULTS.md`.
+
+
