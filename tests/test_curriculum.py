@@ -32,6 +32,14 @@ def test_pool_records_the_save_serial(tmp_path: Path) -> None:
     assert json.loads(meta.read_text())["step"] == 123
 
 
+def test_best_progress_uses_the_highest_score(tmp_path: Path) -> None:
+    pool = CheckpointPool(tmp_path, max_size=10)
+    for progress in (5, 12, 7):
+        add(pool, progress=progress, step=progress)
+
+    assert pool.best_progress() == 12
+
+
 def test_frontier_sampling_draws_from_the_top_half(tmp_path: Path) -> None:
     pool = CheckpointPool(tmp_path, max_size=10)
     for progress in range(1, 7):

@@ -395,6 +395,11 @@ class KantoConfig:
     # makes frequent 178 KB snapshot writes expensive; 0 disables the limit.
     archive_save_cooldown: int = 0
 
+    # Skip archive saves whose progress score is below the pool's best. This
+    # stops the opening-area states from filling the pool once the frontier
+    # moves past them.
+    archive_require_progress: bool = False
+
     # Keep one archive per worker. A shared directory makes 32 workers contend
     # on the same files; per-env pools remove that bottleneck at the cost of
     # not sharing discoveries between workers.

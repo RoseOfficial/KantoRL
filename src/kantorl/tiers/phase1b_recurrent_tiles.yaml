@@ -1,0 +1,71 @@
+# Phase 1b: the Phase 1 method with the archive anchoring fixed.
+#
+# Phase 1 stopped at 10.0M because 83% of resets loaded an archive pool full of
+# opening-area states; unique-map coverage fell from 7.1 to 3.6 and no curated
+# event fired after the opening. This tier changes only the archive policy:
+#   - 25% of resets from the archive, not 75%
+#   - 80% frontier / 20% recent sampling, no uniform opening-state draw
+#   - frontier-only saves: a state below the pool's best progress is skipped
+#
+# The recurrence, learned tile map, reward (explore 3.0, level 4.0), gamma
+# 0.995 and evaluation protocol are unchanged, so the comparison is direct.
+name: phase1b_recurrent_tiles
+
+description: >
+  Phase 1b: Phase 1 method with a less aggressive, frontier-only archive.
+  25% checkpoint resets, 80/20 frontier/recent sampling, 20M gate.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - local_tiles
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 3.0
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  recurrent: true
+  recurrent_n_steps: 32
+  recurrent_batch_size: 128
+
+  enable_curriculum: true
+  enable_hm_automation: false
+  checkpoint_weight: 0.25
+  max_pool_size: 50
+  archive_on_new_map: true
+  archive_cell_stride: 0
+  archive_save_cooldown: 1000
+  archive_per_env: true
+  archive_require_progress: true
+  archive_frontier_fraction: 0.8
+  archive_recent_fraction: 0.2
+  dynamic_episode_length: false
+
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 43

@@ -1371,3 +1371,19 @@ across 32 workers; concurrent pruning of open state files raised
 `PermissionError` inside a worker and stalled `env.close()`. The pool now has
 filename-encoded save serials, best-effort deletion, a hysteresis window and a
 per-worker directory split.
+
+## Phase 1: stopped early on archive anchoring
+
+The Phase 1 method run (RecurrentPPO + learned local tile map + archive) was
+stopped at 10.0M, before the 20M gate. The diagnostics were unambiguous:
+badges 0, four curated events (opening only), unique maps 7.1 peak -> 3.6,
+explore tiles 759 -> 298, and 83% of resets loaded an archive state. The pool
+was full of opening-area states, so every reset pulled the policy back to the
+start. Action entropy stayed at 1.83; this was not a policy collapse.
+
+The 10.0M checkpoint is preserved. The run is not a fair test of recurrence or
+the tile encoder; it is a failure of the archive weighting. Phase 1b freezes a
+new pre-registration: 25% checkpoint resets, 80% frontier / 20% recent
+sampling, and frontier-only saves (skip a state below the pool's best
+progress). The 20M gate and evaluation are unchanged so the comparison is
+direct. See `docs/PHASE1_RESULTS.md` and `docs/PREREGISTRATION_PHASE1B.md`.

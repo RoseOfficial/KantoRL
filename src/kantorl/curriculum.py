@@ -645,6 +645,12 @@ class CurriculumWrapper(gym.Wrapper):
         training worker. The next frontier trigger will try again.
         """
         try:
+            progress = badges * 1000 + events
+            if (
+                self.config.archive_require_progress
+                and self.pool.best_progress() > progress
+            ):
+                return
             state_buffer = BytesIO()
             self._base_env.pyboy.save_state(state_buffer)
             self.pool.add(

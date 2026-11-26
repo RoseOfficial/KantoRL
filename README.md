@@ -102,9 +102,13 @@ lowering the level weight helped at 10M then regressed by 20M. The
 pre-registered decision is the method change, not another reward sweep.
 Details: [docs/PHASE0_RESULTS.md](docs/PHASE0_RESULTS.md).
 
-Phase 1 is the method run: RecurrentPPO, a learned local tile map, and a
-self-generated archive, staged at 50M with a 20M gate. Design and gates:
-[docs/PREREGISTRATION_PHASE1.md](docs/PREREGISTRATION_PHASE1.md).
+Phase 1 was the method run: RecurrentPPO, a learned local tile map, and a
+self-generated archive. The first attempt was stopped at 10.0M because 83% of
+resets loaded opening-area archive states, so map coverage and story progress
+collapsed; the method itself was not fairly tested. The archive was fixed
+(25% resets, frontier-only saves) and Phase 1b reruns the 20M gate:
+[docs/PREREGISTRATION_PHASE1B.md](docs/PREREGISTRATION_PHASE1B.md). The
+stopped run is recorded in [docs/PHASE1_RESULTS.md](docs/PHASE1_RESULTS.md).
 
 
 ## Setup

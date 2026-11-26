@@ -264,6 +264,16 @@ def test_phase1_tier_is_recurrent_archive_without_hm_automation() -> None:
     assert config.gamma == 0.995
 
 
+def test_phase1b_tier_fixes_the_archive_weights() -> None:
+    config = load_tier("phase1b_recurrent_tiles").to_config("pokemon_red.gb")
+
+    assert config.checkpoint_weight == 0.25
+    assert config.archive_frontier_fraction == 0.8
+    assert config.archive_recent_fraction == 0.2
+    assert config.archive_require_progress is True
+    assert config.recurrent is True
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])
