@@ -414,6 +414,19 @@ class FirstSeenCallback(BaseCallback):
 # =============================================================================
 
 
+# Action order matches KantoRedEnv.action_space (see env.py).
+_ACTION_NAMES: tuple[str, ...] = (
+    "noop",
+    "up",
+    "down",
+    "left",
+    "right",
+    "a",
+    "b",
+    "start",
+)
+
+
 class TensorboardCallback(BaseCallback):
     """
     Log game-specific metrics to TensorBoard.
@@ -472,6 +485,17 @@ class TensorboardCallback(BaseCallback):
         self.events_triggered: list[int] = []  # Event flag counts from info dicts
         self.unique_coords: list[int] = []  # Exploration tile counts from info dicts
 
+        # Phase-0 diagnostics. The point is to separate "the reward is being
+        # farmed by grinding" from "the policy is collapsing" from "novelty is
+        # too weak". Reward components are summed per environment step, so the
+        # means stay comparable across episodes of different lengths.
+        self.reward_component_sums: dict[str, float] = {}
+        self.reward_steps: int = 0
+        self.battle_steps: int = 0
+        self.total_steps: int = 0
+        self.unique_maps: list[int] = []
+        self.action_counts = np.zeros(len(_ACTION_NAMES), dtype=np.int64)
+
         # Full event tracking — persists entire training session
         # Union of all event flag bit indices seen across all envs, all time
         self._all_events_seen: set[int] = set()
@@ -521,6 +545,20 @@ class TensorboardCallback(BaseCallback):
             if "unique_coords" in info:
                 self.unique_coords.append(info["unique_coords"])
 
+            # Reward-mix and battle-share diagnostics.
+            breakdown = info.get("reward_breakdown")
+            if breakdown:
+                for name, value in breakdown.items():
+                    self.reward_component_sums[name] = (
+                        self.reward_component_sums.get(name, 0.0) + float(value)
+                    )
+                self.reward_steps += 1
+            if "in_battle" in info:
+                self.total_steps += 1
+                self.battle_steps += int(bool(info["in_battle"]))
+            if "unique_maps" in info:
+                self.unique_maps.append(int(info["unique_maps"]))
+
             # Collect newly set event flags and announce first-time events
             for idx in info.get("new_event_indices", []):
                 if idx not in self._all_events_seen:
@@ -540,8 +578,19 @@ class TensorboardCallback(BaseCallback):
             if "curriculum_dynamic_max_steps" in info:
                 self.curriculum_dynamic_max_steps.append(info["curriculum_dynamic_max_steps"])
 
+        # Action histogram: a collapsed policy shows up as low entropy long
+        # before the reward curve says anything is wrong.
+        actions = self.locals.get("actions")
+        if actions is not None:
+            for action in np.asarray(actions).reshape(-1):
+                index = int(action)
+                if 0 <= index < len(self.action_counts):
+                    self.action_counts[index] += 1
+
         # Log aggregated metrics at regular intervals
-        if self.num_timesteps % self.log_freq == 0 and self.badges_collected:
+        if self.num_timesteps % self.log_freq == 0 and (
+            self.badges_collected or self.reward_steps
+        ):
             # Log badge statistics
             # Mean shows typical performance, max shows best achieved
             self.logger.record("game/badges_mean", np.mean(self.badges_collected))
@@ -554,6 +603,11 @@ class TensorboardCallback(BaseCallback):
 
             # Log total unique events ever seen across all envs (session-wide)
             self.logger.record("game/events_achieved", len(self._all_events_seen))
+
+            # Log Phase-0 diagnostics: reward mix, battle share, action
+            # entropy and map coverage over the same window.
+            for name, value in self._window_metrics().items():
+                self.logger.record(name, value)
 
             # Log curriculum metrics (only if curriculum data was collected)
             if self.curriculum_pool_sizes:
@@ -589,6 +643,7 @@ class TensorboardCallback(BaseCallback):
             self.badges_collected.clear()
             self.events_triggered.clear()
             self.unique_coords.clear()
+            self._clear_window()
             self.curriculum_pool_sizes.clear()
             self.curriculum_best_progress.clear()
             self.curriculum_checkpoint_resets.clear()
@@ -596,6 +651,68 @@ class TensorboardCallback(BaseCallback):
             self.curriculum_dynamic_max_steps.clear()
 
         return True
+
+    def _window_metrics(self) -> dict[str, float]:
+        """Aggregate the current logging window into TensorBoard scalars.
+
+        Reward components are the scaled per-step values produced by the
+        reward function. Means are per environment step, not per episode, so
+        they remain comparable when episode lengths differ or a window
+        straddles a reset.
+        """
+        metrics: dict[str, float] = {}
+
+        if self.reward_steps:
+            total = sum(self.reward_component_sums.values())
+            metrics["game/reward_total_mean"] = total / self.reward_steps
+            for name in sorted(self.reward_component_sums):
+                metrics[f"game/reward_{name}_mean"] = (
+                    self.reward_component_sums[name] / self.reward_steps
+                )
+
+            # Shares of positive reward only. The stuck penalty is negative
+            # and would distort the denominator without changing the reading.
+            positive = sum(value for value in self.reward_component_sums.values() if value > 0)
+            if positive > 0:
+                for name in (
+                    "event",
+                    "level",
+                    "explore",
+                    "map_progress",
+                    "badge",
+                    "interact",
+                    "heal",
+                ):
+                    if name in self.reward_component_sums:
+                        metrics[f"game/reward_{name}_share"] = (
+                            self.reward_component_sums[name] / positive
+                        )
+
+        if self.total_steps:
+            metrics["game/battle_fraction"] = self.battle_steps / self.total_steps
+
+        if self.unique_maps:
+            metrics["game/unique_maps_mean"] = float(np.mean(self.unique_maps))
+
+        counts = self.action_counts.astype(np.float64)
+        action_total = counts.sum()
+        if action_total > 0:
+            probabilities = counts / action_total
+            nonzero = probabilities[probabilities > 0]
+            metrics["game/action_entropy"] = float(-(nonzero * np.log(nonzero)).sum())
+            for index, name in enumerate(_ACTION_NAMES):
+                metrics[f"game/action_{name}_frac"] = float(probabilities[index])
+
+        return metrics
+
+    def _clear_window(self) -> None:
+        """Reset the diagnostic window after it has been logged."""
+        self.reward_component_sums.clear()
+        self.reward_steps = 0
+        self.battle_steps = 0
+        self.total_steps = 0
+        self.unique_maps.clear()
+        self.action_counts.fill(0)
 
     def _write_event_checklist(self) -> None:
         """

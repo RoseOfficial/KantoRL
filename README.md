@@ -93,6 +93,14 @@ Both headline policies are published as release assets on the
 committed to git (~33 MB each). See [docs/MODELS.md](docs/MODELS.md) for
 provenance, configuration and the exact evaluation command.
 
+### Next phase: Phase 0
+
+The program has reopened with a pre-registered screen of *why* the clean
+from-scratch run failed, before any method change: four single-axis arms
+(control, gamma, exploration weight, level weight) at 20M steps each. The
+design, endpoints and decision rules are frozen in
+[docs/PREREGISTRATION_PHASE0.md](docs/PREREGISTRATION_PHASE0.md).
+
 
 ## Setup
 

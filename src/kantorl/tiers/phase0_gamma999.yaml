@@ -1,0 +1,50 @@
+# Phase 0 screen: credit-horizon arm.
+#
+# Changes only gamma from 0.995 to 0.999. At 24 frames per action, 0.995
+# gives an effective horizon of roughly 200 decisions, while Brock is about
+# 7,000 steps from the start. The 104M warm-start probe found gamma 0.999
+# faster and more reliable on the badge; this arm asks whether it helps from
+# scratch instead. Everything else matches phase0_baseline.
+name: phase0_gamma999
+
+description: >
+  Phase 0 arm: baseline with gamma 0.999. Tests whether the short credit
+  horizon is what keeps the from-scratch run from reaching Brock.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.999
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 43

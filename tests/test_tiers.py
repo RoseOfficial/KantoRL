@@ -219,7 +219,6 @@ def test_tiles_tier_adds_only_the_local_tiles_and_rate() -> None:
 
 def test_clean_tier_is_the_final_ruleset() -> None:
     config = load_tier("t2_levelmax_h60_lr1e4to5e5").to_config("pokemon_red.gb")
-
     assert config.obs_components == (
         "screens",
         "health",
@@ -236,6 +235,21 @@ def test_clean_tier_is_the_final_ruleset() -> None:
     assert config.learning_rate == 1e-4
     assert config.lr_decay_step == 78_000_000
     assert config.lr_decay_to == 5e-5
+
+
+def test_phase0_arms_change_one_axis_each() -> None:
+    """The Phase 0 screen is only interpretable if each arm is one change."""
+    base = load_tier("phase0_baseline").config
+
+    for name, key, value in (
+        ("phase0_gamma999", "gamma", 0.999),
+        ("phase0_explore3", "explore_weight", 3.0),
+        ("phase0_level1", "level_weight", 1.0),
+    ):
+        arm = load_tier(name).config
+        changed = {k for k in set(base) | set(arm) if base.get(k) != arm.get(k)}
+        assert changed == {key}, f"{name} changed {sorted(changed)}"
+        assert arm[key] == value
 
 
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:

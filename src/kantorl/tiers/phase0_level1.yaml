@@ -1,0 +1,51 @@
+# Phase 0 screen: level-reward arm.
+#
+# Changes only level_weight from 4.0 to 1.0. The max-level potential is the
+# largest early reward term and wild battles are the cheapest way to earn it,
+# so the clean run's Viridian Forest plateau is consistent with grinding.
+# This arm asks whether lowering the term frees the policy to leave the grass.
+# The 104M reward-rebalance warm start regressed; from scratch is a different
+# question, and this is the cheap version of it.
+name: phase0_level1
+
+description: >
+  Phase 0 arm: baseline with level_weight 1.0. Tests whether the level
+  potential crowds out story progress from scratch.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 0.3
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 1.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 43

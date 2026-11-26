@@ -1284,3 +1284,20 @@ Artifacts: `runs/best/red_99M_s43.zip` (deepest) and
 `runs/best/red_gamma_104M_s43.zip` (speed). A future phase should test a
 larger map prior (tile-level walkability) or a different algorithm from
 scratch, not another warm-start.
+
+## Phase 0: reopening the program
+
+The development program above is frozen and released as v0.1.0. A new phase
+starts from the same codebase and a new training lineage: no warm start, no
+retuning of the 99M policy, and evaluation always from a cold `bulba_start`.
+
+The first step is a pre-registered screen of why the clean from-scratch run
+failed, before changing the method: four 20M single-axis arms (control, gamma
+0.999, explore weight 3.0, level weight 1.0). The design, endpoints and
+decision rules were frozen before the scored runs in
+`docs/PREREGISTRATION_PHASE0.md`. Results will be appended here and in
+`docs/PHASE0_RESULTS.md`.
+
+The training callback now logs the reward mix (`game/reward_*_share`), battle
+fraction, action entropy and per-episode map coverage, so "grinding" and
+"policy collapse" are measured rather than inferred from the reward curve.

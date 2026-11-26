@@ -1,0 +1,50 @@
+# Phase 0 screen: exploration-weight arm.
+#
+# Changes only explore_weight from 0.3 to 3.0, a tenfold increase in the
+# per-new-cell reward (0.015 -> 0.15 at reward_scale 0.5). The clean run
+# reached Viridian Forest and then kept fighting wild Pokemon; this arm asks
+# whether novelty is simply too cheap relative to the level reward. It is a
+# reward-weight probe, not RND: Phase 1 owns the method change.
+name: phase0_explore3
+
+description: >
+  Phase 0 arm: baseline with explore_weight 3.0. Tests whether weak
+  coordinate novelty, rather than the method, causes the grinding plateau.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 3.0
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  enable_curriculum: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 43

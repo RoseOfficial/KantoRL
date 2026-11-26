@@ -51,8 +51,11 @@ __all__ = [
 # the legacy observation and changes only the reward balance and rate;
 # t2_levelmax_h60_lr2e5_g999 changes only gamma and the rate;
 # t2_levelmax_h60_marker_lr2e5 adds the minimal player-position marker;
-# t2_levelmax_h60_tiles_lr2e5 adds the larger local raw tile-ID window; and
+# t2_levelmax_h60_tiles_lr2e5 adds the larger local raw tile-ID window;
 # t2_levelmax_h60_lr1e4to5e5 is the clean from-scratch final ruleset.
+# The phase0_* tiers are the pre-registered single-axis screen described in
+# docs/PREREGISTRATION_PHASE0.md: baseline, gamma, exploration weight and
+# level weight, each at 20M.
 BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t0_pure",
     "t1_minimal",
@@ -72,6 +75,10 @@ BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "t2_levelmax_h60_marker_lr2e5",
     "t2_levelmax_h60_tiles_lr2e5",
     "t2_levelmax_h60_lr1e4to5e5",
+    "phase0_baseline",
+    "phase0_gamma999",
+    "phase0_explore3",
+    "phase0_level1",
 )
 
 # Keys allowed in the ``train`` section. These are loop-level arguments, not

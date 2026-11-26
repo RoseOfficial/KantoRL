@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 
@@ -213,6 +214,64 @@ def test_tensorboard_badge_max_is_all_time_not_windowed(tmp_path):
 
     assert callback._max_badges_seen == 1
     assert max(callback.badges_collected) == 0
+
+
+def test_tensorboard_diagnostics_measure_reward_mix_and_actions():
+    """The Phase 0 screen reads the reward mix and action histogram."""
+    callback = TensorboardCallback(log_freq=1000)
+    callback.num_timesteps = 1
+    callback.locals = {
+        "infos": [
+            {
+                "reward_breakdown": {
+                    "event": 0.0,
+                    "level": 2.0,
+                    "explore": 0.5,
+                    "stuck": 0.0,
+                },
+                "in_battle": True,
+                "unique_maps": 3,
+            },
+            {
+                "reward_breakdown": {
+                    "event": 4.0,
+                    "level": 0.0,
+                    "explore": 0.0,
+                    "stuck": 0.0,
+                },
+                "in_battle": False,
+                "unique_maps": 4,
+            },
+        ],
+        "actions": np.array([1, 5]),
+    }
+
+    callback._on_step()
+    metrics = callback._window_metrics()
+
+    assert metrics["game/reward_total_mean"] == pytest.approx(3.25)
+    assert metrics["game/reward_level_mean"] == pytest.approx(1.0)
+    assert metrics["game/reward_level_share"] == pytest.approx(2.0 / 6.5)
+    assert metrics["game/reward_event_share"] == pytest.approx(4.0 / 6.5)
+    assert metrics["game/battle_fraction"] == pytest.approx(0.5)
+    assert metrics["game/unique_maps_mean"] == pytest.approx(3.5)
+    assert metrics["game/action_entropy"] == pytest.approx(np.log(2))
+    assert metrics["game/action_up_frac"] == pytest.approx(0.5)
+    assert metrics["game/action_a_frac"] == pytest.approx(0.5)
+
+
+def test_tensorboard_diagnostics_clear_between_windows():
+    callback = TensorboardCallback(log_freq=1000)
+    callback.num_timesteps = 1
+    callback.locals = {
+        "infos": [{"reward_breakdown": {"level": 1.0}}],
+        "actions": np.array([1]),
+    }
+
+    callback._on_step()
+    callback._clear_window()
+
+    assert callback._window_metrics() == {}
 
 
 # =============================================================================
