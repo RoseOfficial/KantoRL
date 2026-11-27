@@ -1387,3 +1387,19 @@ new pre-registration: 25% checkpoint resets, 80% frontier / 20% recent
 sampling, and frontier-only saves (skip a state below the pool's best
 progress). The 20M gate and evaluation are unchanged so the comparison is
 direct. See `docs/PHASE1_RESULTS.md` and `docs/PREREGISTRATION_PHASE1B.md`.
+
+## Phase 1b: stopped at 3.6M, the archive fix overcorrected
+
+The fixed archive (25% resets, 80/20 frontier/recent, frontier-only saves) was
+stopped at 3.6M. The pool held one state, so 25% resets provided no curriculum;
+the policy never left the opening. A diagnostic evaluation of the 3.5M
+checkpoint on seeds 0-2 gave 0/3 Boulder, 11 events and 1-6 explore tiles, with
+episodes ending after ~10k steps. Training-side map coverage was 1.08 maps and
+25 tiles, against 5.7 maps and 582 tiles for Phase 1 at 8.4M.
+
+The archive is both a curriculum and an anchor. Phase 1's 75% early-state
+resets were teaching the opening; Phase 1b removed that and left nothing. The
+recurrent policy also showed no early-game learning at this budget, so the
+archive cannot be evaluated cleanly. The next phase isolates the components
+with the faster feedforward PPO (legacy control, archive 50%, tile map, both).
+See `docs/PHASE1B_RESULTS.md`.

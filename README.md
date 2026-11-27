@@ -105,10 +105,13 @@ Details: [docs/PHASE0_RESULTS.md](docs/PHASE0_RESULTS.md).
 Phase 1 was the method run: RecurrentPPO, a learned local tile map, and a
 self-generated archive. The first attempt was stopped at 10.0M because 83% of
 resets loaded opening-area archive states, so map coverage and story progress
-collapsed; the method itself was not fairly tested. The archive was fixed
-(25% resets, frontier-only saves) and Phase 1b reruns the 20M gate:
-[docs/PREREGISTRATION_PHASE1B.md](docs/PREREGISTRATION_PHASE1B.md). The
-stopped run is recorded in [docs/PHASE1_RESULTS.md](docs/PHASE1_RESULTS.md).
+collapsed. The archive fix (25% resets, frontier-only saves) was stopped at
+3.6M for the opposite reason: the pool held one state, so the policy never
+left the opening. Neither extreme works, and the recurrent policy was not
+learning the early game at this budget. The next phase is a cheap PPO
+ablation that isolates the archive and the tile map from recurrence:
+[docs/PHASE1_RESULTS.md](docs/PHASE1_RESULTS.md) and
+[docs/PHASE1B_RESULTS.md](docs/PHASE1B_RESULTS.md).
 
 
 ## Setup
