@@ -1,0 +1,62 @@
+# Phase 2 ablation: PPO + archive at 50% resets.
+#
+# Only the archive is added to the control. The pool keeps diverse map/event
+# states (no frontier-only filter) and resets from them half the time. Phase 1
+# used 75% and anchored; Phase 1b used 25% with a one-state pool and lost the
+# opening curriculum. This arm asks whether 50% with a diverse pool helps the
+# known PPO baseline.
+name: phase2_archive50
+
+description: >
+  Phase 2 arm: control plus a self-generated archive at 50% resets, diverse
+  map/event states, 50/30/20 frontier/recent/uniform sampling. 20M steps.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 3.0
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  recurrent: false
+  enable_curriculum: true
+  enable_hm_automation: false
+  checkpoint_weight: 0.5
+  max_pool_size: 50
+  archive_on_new_map: true
+  archive_cell_stride: 0
+  archive_save_cooldown: 1000
+  archive_per_env: true
+  archive_require_progress: false
+  archive_frontier_fraction: 0.5
+  archive_recent_fraction: 0.3
+  dynamic_episode_length: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 43

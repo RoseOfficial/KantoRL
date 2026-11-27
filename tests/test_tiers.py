@@ -274,6 +274,41 @@ def test_phase1b_tier_fixes_the_archive_weights() -> None:
     assert config.recurrent is True
 
 
+def test_phase2_arms_isolate_archive_and_tiles() -> None:
+    control = load_tier("phase2_control").config
+    tiles = load_tier("phase2_tiles").config
+    archive = load_tier("phase2_archive50").config
+    both = load_tier("phase2_tiles_archive50").config
+
+    assert control["enable_curriculum"] is False
+    assert control["recurrent"] is False
+    assert "local_tiles" not in control["obs_components"]
+
+    assert set(tiles["obs_components"]) == set(control["obs_components"]) | {
+        "local_tiles"
+    }
+    assert tiles["enable_curriculum"] is False
+
+    assert archive["obs_components"] == control["obs_components"]
+    assert archive["enable_curriculum"] is True
+    assert archive["checkpoint_weight"] == 0.5
+    assert archive["recurrent"] is False
+
+    assert set(both["obs_components"]) == set(tiles["obs_components"])
+    assert both["enable_curriculum"] is True
+
+    for arm in (tiles, archive, both):
+        for key in (
+            "explore_weight",
+            "level_weight",
+            "gamma",
+            "learning_rate",
+            "max_steps",
+            "n_envs",
+        ):
+            assert arm[key] == control[key]
+
+
 def test_t2_uses_pixels_and_more_priors_than_t1() -> None:
     t1 = set(load_tier("t1_minimal").config["obs_components"])
     t2 = set(load_tier("t2_pragmatic").config["obs_components"])

@@ -110,7 +110,8 @@ collapsed. The archive fix (25% resets, frontier-only saves) was stopped at
 left the opening. Neither extreme works, and the recurrent policy was not
 learning the early game at this budget. The next phase is a cheap PPO
 ablation that isolates the archive and the tile map from recurrence:
-[docs/PHASE1_RESULTS.md](docs/PHASE1_RESULTS.md) and
+[docs/PREREGISTRATION_PHASE2.md](docs/PREREGISTRATION_PHASE2.md). The stopped
+runs are recorded in [docs/PHASE1_RESULTS.md](docs/PHASE1_RESULTS.md) and
 [docs/PHASE1B_RESULTS.md](docs/PHASE1B_RESULTS.md).
 
 

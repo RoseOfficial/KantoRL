@@ -81,6 +81,10 @@ BUILTIN_TIER_NAMES: tuple[str, ...] = (
     "phase0_level1",
     "phase1_recurrent_tiles",
     "phase1b_recurrent_tiles",
+    "phase2_control",
+    "phase2_archive50",
+    "phase2_tiles",
+    "phase2_tiles_archive50",
 )
 
 # Keys allowed in the ``train`` section. These are loop-level arguments, not

@@ -480,7 +480,9 @@ def train(
     # reads those decisions back instead of the scalar defaults.
     n_envs = config.n_envs
     use_curriculum = config.enable_curriculum
-    use_recurrent = config.recurrent or config.enable_curriculum
+    # Recurrence is opt-in. The archive no longer implies it, so the archive
+    # can be tested with feedforward PPO as a single change.
+    use_recurrent = config.recurrent
     use_agent = config.enable_agent
     enable_streaming = config.enable_streaming
     enable_wandb = config.enable_wandb
@@ -631,7 +633,7 @@ def train(
 
         if use_recurrent:
             # Use RecurrentPPO with LSTM for temporal memory. This is selected
-            # by --recurrent or by the archive wrapper, which implies it.
+            # only by --recurrent; the archive is independent.
             from sb3_contrib import RecurrentPPO
 
             # RecurrentPPO needs shorter rollouts for effective LSTM BPTT.
@@ -908,7 +910,7 @@ def main() -> None:
     parser.add_argument(
         "--curriculum",
         action="store_true",
-        help="Enable the self-generated checkpoint archive and RecurrentPPO",
+        help="Enable the self-generated checkpoint archive (add --recurrent for LSTM)",
     )
     parser.add_argument(
         "--recurrent",

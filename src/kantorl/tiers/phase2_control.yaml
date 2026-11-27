@@ -1,0 +1,50 @@
+# Phase 2 ablation: PPO control.
+#
+# The feedforward PPO baseline that learns the early game, with the Phase 0
+# explore_weight=3.0 setting. This is the reference for the archive and tile
+# map arms. No recurrence, no archive, no local tiles.
+name: phase2_control
+
+description: >
+  Phase 2 control: PPO, legacy observation, explore 3.0, no archive, no local
+  tiles. 20M steps from scratch.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 3.0
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  recurrent: false
+  enable_curriculum: false
+  enable_hm_automation: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 43

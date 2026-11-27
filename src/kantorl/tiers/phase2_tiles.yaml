@@ -1,0 +1,51 @@
+# Phase 2 ablation: PPO + learned local tile map.
+#
+# Only the 15x15 local tile observation is added to the control. Raw tile IDs
+# go through a 256-entry embedding and a small CNN, so the model learns which
+# tiles behave alike. No archive, no recurrence.
+name: phase2_tiles
+
+description: >
+  Phase 2 arm: control plus the learned 15x15 local tile map. No archive, no
+  recurrence. 20M steps.
+
+config:
+  obs_components:
+    - screens
+    - health
+    - level
+    - badges
+    - events
+    - map
+    - local_tiles
+    - recent_actions
+  frame_stacks: 3
+  screen_size: [72, 80]
+  action_freq: 24
+  max_steps: 61440
+  stagnation_steps: 30720
+  stagnation_reward: 1.0
+
+  reward_scale: 0.5
+  explore_weight: 3.0
+  interact_weight: 1.0
+  interact_once_per_run: true
+  stuck_penalty: 0.0
+  level_weight: 4.0
+  level_source: max
+  heal_weight: 0.0
+
+  gamma: 0.995
+  target_kl: 0.02
+  n_envs: 32
+  learning_rate: 0.0001
+
+  recurrent: false
+  enable_curriculum: false
+  enable_hm_automation: false
+  enable_agent: false
+
+train:
+  total_timesteps: 20000000
+  reward_fn: default
+  seed: 43

@@ -1403,3 +1403,20 @@ recurrent policy also showed no early-game learning at this budget, so the
 archive cannot be evaluated cleanly. The next phase isolates the components
 with the faster feedforward PPO (legacy control, archive 50%, tile map, both).
 See `docs/PHASE1B_RESULTS.md`.
+
+## Phase 2: component ablation (built, not launched)
+
+Phase 2 isolates the archive and the learned tile map with feedforward PPO,
+which runs at ~1,800 steps/s and is therefore 3-4x cheaper per step than the
+recurrent model. Four 20M arms, one change each: control, archive at 50%
+resets with diverse map/event states, local tile map, and both. The control is
+the same reward as the arms (explore 3.0), so Phase 0's explore3 result is an
+external sanity check rather than the control.
+
+The archive is now independent of recurrence: `enable_curriculum` wraps the
+environment but no longer selects RecurrentPPO; `recurrent` is the only switch
+for the LSTM. This was verified by a 50k-step PPO + archive smoke run.
+
+Pre-registration: `docs/PREREGISTRATION_PHASE2.md`. Runner:
+`scripts/run_phase2.py`. The matrix is built and tested but intentionally not
+launched.

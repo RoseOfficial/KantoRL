@@ -154,6 +154,14 @@ def test_cli_recurrent_adds_recurrence_without_the_archive() -> None:
     assert config.enable_curriculum is False
 
 
+def test_curriculum_no_longer_implies_recurrence() -> None:
+    """The archive must be testable with feedforward PPO."""
+    config = resolve(use_curriculum=True)
+
+    assert config.enable_curriculum is True
+    assert config.recurrent is False
+
+
 def test_tier_recurrence_and_archive_survive_a_silent_cli() -> None:
     config = resolve(base_config=load_tier("phase1_recurrent_tiles").to_config("pokemon_red.gb"))
 
