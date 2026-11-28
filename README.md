@@ -107,11 +107,13 @@ self-generated archive. The first attempt was stopped at 10.0M because 83% of
 resets loaded opening-area archive states, so map coverage and story progress
 collapsed. The archive fix (25% resets, frontier-only saves) was stopped at
 3.6M for the opposite reason: the pool held one state, so the policy never
-left the opening. Neither extreme works, and the recurrent policy was not
-learning the early game at this budget. The next phase is a cheap PPO
-ablation that isolates the archive and the tile map from recurrence:
-[docs/PREREGISTRATION_PHASE2.md](docs/PREREGISTRATION_PHASE2.md). The stopped
-runs are recorded in [docs/PHASE1_RESULTS.md](docs/PHASE1_RESULTS.md) and
+The PPO ablation is complete. The learned tile map was the first clear
+from-scratch gain: at 10M it reached Pewter 3/3 (control: 0/3) at level 16,
+then collapsed back to the start by 20M. The archive did not help, and no arm
+reached Boulder at 20M. The next experiment keeps the tile map and targets
+retention with a lower late learning rate and denser checkpoint evaluation:
+[docs/PHASE2_RESULTS.md](docs/PHASE2_RESULTS.md), with the stopped Phase 1
+runs in [docs/PHASE1_RESULTS.md](docs/PHASE1_RESULTS.md) and
 [docs/PHASE1B_RESULTS.md](docs/PHASE1B_RESULTS.md).
 
 

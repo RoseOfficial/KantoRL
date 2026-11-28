@@ -1420,3 +1420,22 @@ for the LSTM. This was verified by a 50k-step PPO + archive smoke run.
 Pre-registration: `docs/PREREGISTRATION_PHASE2.md`. Runner:
 `scripts/run_phase2.py`. The matrix is built and tested but intentionally not
 launched.
+
+## Phase 2 result: the tile map gains, then collapses
+
+The four-arm PPO ablation completed (control, archive50, tiles, tiles+archive).
+No arm reached Boulder at 20M; the control reproduced Phase 0 explore3 exactly
+(0/3 Boulder, Pewter 2/3, Forest 3/3). The archive did not help and was
+slightly behind the control at 20M.
+
+The tile map produced the first clear from-scratch gain. At 10M it had Forest
+3/3 at a 1,302 median, Pewter 3/3 at 23,113, 17.3 events, and a level-16
+party; the control at 10M was level 6 and had not reached Pewter. Then the 20M
+checkpoint collapsed to 11 events, level 6, and 7 explore tiles, while the
+training-side policy still showed 15 events and 11.6 maps. This is a
+late-training drift that destroys the cold-start policy, not an exploration
+failure.
+
+Phase 3 carries only the tile map and targets retention: lower late learning
+rate (1e-4 -> 5e-5 at 10M) and fixed evaluation every 2.5M. The archive is
+dropped. Full write-up: `docs/PHASE2_RESULTS.md`.
